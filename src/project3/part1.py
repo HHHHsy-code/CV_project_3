@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 import numpy as np
 
 from .io_utils import ensure_dir, write_json
-from .video_utils import read_video, save_frames, write_video
+from .video_utils import read_frame_directory, read_video, save_frames, write_video
 
 
 def _require_cv2():
@@ -51,8 +51,13 @@ class BaselineVideoObjectRemoval:
             "ns": self.cv2.INPAINT_NS,
         }[self.config["inpainting"]["cv2_method"].lower()]
 
-    def run(self, video_path: str | Path, output_dir: str | Path) -> Dict[str, Any]:
-        video = read_video(video_path)
+    def run(
+        self,
+        input_path: str | Path,
+        output_dir: str | Path,
+        fps: float | None = None,
+    ) -> Dict[str, Any]:
+        video, input_type = self._load_input(input_path, fps=fps)
         output_root = ensure_dir(output_dir)
         input_frames_dir = ensure_dir(output_root / "input_frames")
         masks_dir = ensure_dir(output_root / "masks")
@@ -71,7 +76,8 @@ class BaselineVideoObjectRemoval:
         write_video(output_root / "restored_video.mp4", restored_frames, video.fps)
 
         summary = {
-            "video_path": str(video_path),
+            "input_path": str(input_path),
+            "input_type": input_type,
             "num_frames": len(video.frames),
             "fps": video.fps,
             "frame_size": {"width": video.size[0], "height": video.size[1]},
@@ -89,6 +95,14 @@ class BaselineVideoObjectRemoval:
         }
         write_json(summary, output_root / "summary.json")
         return summary
+
+    def _load_input(self, input_path: str | Path, fps: float | None = None):
+        source = Path(input_path)
+        if source.is_dir():
+            video = read_frame_directory(source, fps=fps or 24.0)
+            return video, "frames_dir"
+        video = read_video(source)
+        return video, "video"
 
     def _segment_frames(self, frames: List[np.ndarray]) -> List[List[Detection]]:
         conf = self.config["detector"]["conf_threshold"]

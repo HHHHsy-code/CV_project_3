@@ -6,6 +6,8 @@ from typing import List
 
 import numpy as np
 
+from .io_utils import list_images
+
 
 @dataclass
 class VideoData:
@@ -47,6 +49,23 @@ def read_video(video_path: str | Path) -> VideoData:
     return VideoData(frames=frames, fps=fps, size=(width, height))
 
 
+def read_frame_directory(frames_dir: str | Path, fps: float = 24.0) -> VideoData:
+    cv2 = _require_cv2()
+    frame_paths = list_images(frames_dir)
+    if not frame_paths:
+        raise RuntimeError(f"No image frames found in directory: {frames_dir}")
+
+    frames: List[np.ndarray] = []
+    for path in frame_paths:
+        frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if frame is None:
+            raise RuntimeError(f"Failed to read frame: {path}")
+        frames.append(frame)
+
+    height, width = frames[0].shape[:2]
+    return VideoData(frames=frames, fps=fps, size=(width, height))
+
+
 def write_video(video_path: str | Path, frames: List[np.ndarray], fps: float) -> None:
     cv2 = _require_cv2()
     if not frames:
@@ -80,7 +99,6 @@ def save_frames(frames: List[np.ndarray], directory: str | Path, stem: str = "fr
 
 def load_grayscale_images(directory: str | Path) -> List[np.ndarray]:
     cv2 = _require_cv2()
-    from .io_utils import list_images
 
     images = []
     for path in list_images(directory):

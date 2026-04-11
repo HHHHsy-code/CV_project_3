@@ -109,6 +109,17 @@ python3 scripts/project3.py part1 \
   --experiment wild_corridor
 ```
 
+Run Part 1 directly on a frame directory such as the course sample data:
+
+```bash
+source .venv/bin/activate
+python3 scripts/project3.py part1 \
+  --config configs/project3.yaml \
+  --frames-dir Project3/bmx-trees \
+  --fps 24 \
+  --experiment bmx_trees_part1
+```
+
 This writes outputs into:
 
 ```text
@@ -130,9 +141,9 @@ Evaluate masks:
 
 ```bash
 python3 scripts/project3.py eval-mask \
-  --pred outputs/part1/davis_example/masks \
-  --gt data/raw/davis/example/masks \
-  --output metrics/davis_example_mask_metrics.json
+  --pred outputs/part1/bmx_trees_part1/masks \
+  --gt Project3/bmx-trees_mask \
+  --output metrics/bmx_trees_mask_metrics.json
 ```
 
 Evaluate restored frames:

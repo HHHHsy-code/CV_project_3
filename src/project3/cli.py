@@ -19,9 +19,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     part1 = subparsers.add_parser("part1", help="Run the baseline Part 1 pipeline")
     part1.add_argument("--config", required=True)
-    part1.add_argument("--video", required=True)
+    input_group = part1.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--video")
+    input_group.add_argument("--frames-dir")
     part1.add_argument("--experiment", required=True)
     part1.add_argument("--output-root", default="outputs/part1")
+    part1.add_argument("--fps", type=float, default=24.0, help="Used only when --frames-dir is provided")
 
     eval_mask = subparsers.add_parser("eval-mask", help="Evaluate predicted masks against GT masks")
     eval_mask.add_argument("--pred", required=True)
@@ -68,7 +71,8 @@ def main() -> None:
         config = load_yaml_config(args.config)
         pipeline = BaselineVideoObjectRemoval(config)
         output_dir = Path(args.output_root) / args.experiment
-        result = pipeline.run(args.video, output_dir)
+        input_path = args.video or args.frames_dir
+        result = pipeline.run(input_path, output_dir, fps=args.fps)
         figures_path = output_dir / "figures" / "comparison_grid.png"
         generate_comparison_grid(output_dir, figures_path, samples=config["part1"]["visualization"]["representative_frames"])
         print(result)
