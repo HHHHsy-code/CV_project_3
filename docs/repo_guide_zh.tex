@@ -1,0 +1,579 @@
+\documentclass[11pt,a4paper,fontset=none]{ctexart}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{fancyvrb}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\setlist[itemize]{leftmargin=2em}
+\setlist[enumerate]{leftmargin=2.2em}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+
+\setmainfont{Times New Roman}
+\setsansfont{Arial}
+\setmonofont{Menlo}
+\setCJKmainfont{Songti SC}
+\setCJKsansfont{Hiragino Sans GB}
+\setCJKmonofont{Hiragino Sans GB}
+
+\title{Project 3 仓库说明（中文版）}
+\author{AIAA 3201 Project 3: Video Object Removal \& Inpainting}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{文档目的}
+
+这份文档是当前仓库的中文版使用说明，主要回答三类问题：
+
+\begin{itemize}
+  \item 仓库里每个文件和目录是做什么用的；
+  \item 目前哪些部分已经实现，哪些部分只是为后续实验预留接口；
+  \item 因为 GPU 资源在服务器上，接下来你们应该按什么顺序把这套代码迁移到服务器并真正跑起来。
+\end{itemize}
+
+如果你们后面忘了某个文件的作用，优先先看这份文档，而不是直接猜。
+
+\section{项目当前总体结构}
+
+当前仓库围绕下面这条主线组织：
+
+\begin{center}
+\texttt{动态目标掩码生成 -> 掩码优化 -> 视频补全 -> 定量评测 -> 可视化 -> 报告写作}
+\end{center}
+
+整体上已经具备：
+
+\begin{itemize}
+  \item Part 1 baseline 的代码骨架与命令入口；
+  \item Part 2 的外部模型接入接口；
+  \item Part 3 的 failure case 工作区准备工具；
+  \item 指标计算、可视化、报告和展示材料的模板。
+\end{itemize}
+
+\section{顶层文件说明}
+
+\subsection{\texttt{README.md}}
+
+这是仓库的主入口文档。
+
+主要用途：
+
+\begin{itemize}
+  \item 解释整个项目的目标；
+  \item 展示目录结构；
+  \item 给出环境安装方式；
+  \item 给出 Part 1 运行方式；
+  \item 给出评测命令；
+  \item 给出 Part 2 / Part 3 的推荐工作流。
+\end{itemize}
+
+任何第一次打开仓库的人，应该先读它。
+
+\subsection{\texttt{requirements.txt}}
+
+这是 Python 依赖列表。
+
+里面当前列出的核心包包括：
+
+\begin{itemize}
+  \item \texttt{opencv-python}：读写视频、光流、掩码处理、图像修复；
+  \item \texttt{ultralytics}：YOLOv8-seg；
+  \item \texttt{PyYAML}：读取配置文件；
+  \item \texttt{scikit-image}：SSIM；
+  \item \texttt{numpy / scipy / matplotlib}：基础数值和可视化支持。
+\end{itemize}
+
+\subsection{\texttt{.gitignore}}
+
+这个文件是为了避免把大文件误提交到仓库里。
+
+它会忽略：
+
+\begin{itemize}
+  \item 原始数据视频；
+  \item 抽帧结果；
+  \item 实验输出；
+  \item 指标结果；
+  \item 虚拟环境和缓存文件。
+\end{itemize}
+
+因为视频项目的中间产物非常大，这个文件很重要。
+
+\section{配置文件说明}
+
+\subsection{\texttt{configs/project3.yaml}}
+
+这是默认实验配置文件，也是后续最常修改的文件之一。
+
+它控制：
+
+\begin{itemize}
+  \item YOLO 模型名称；
+  \item 要保留的目标类别；
+  \item 光流动态判断阈值；
+  \item 掩码膨胀参数；
+  \item 时间窗口大小；
+  \item Part 2 中 \texttt{SAM 2} 和 \texttt{ProPainter} 的外部路径；
+  \item Part 3 的说明性参数。
+\end{itemize}
+
+可以把它理解成实验控制面板。
+
+\section{代码入口说明}
+
+\subsection{\texttt{scripts/project3.py}}
+
+这是你们之后最常直接运行的入口脚本。
+
+它封装了命令行接口，目前支持：
+
+\begin{itemize}
+  \item \texttt{part1}：运行 Part 1 baseline；
+  \item \texttt{eval-mask}：计算 mask 指标；
+  \item \texttt{eval-video}：计算恢复结果指标；
+  \item \texttt{figures}：生成对比图；
+  \item \texttt{part2-prepare}：建立 Part 2 实验工作区；
+  \item \texttt{part3-prepare}：建立 Part 3 failure case 工作区。
+\end{itemize}
+
+这个脚本存在的意义是让你们不需要手动处理 \texttt{PYTHONPATH}。
+
+\section{\texttt{src/project3/} 代码逐文件说明}
+
+\subsection{\texttt{config.py}}
+
+负责读取配置文件。
+
+除了标准 YAML 读取外，它还额外提供了一个轻量 fallback 解析器。这样做的目的是：即使本地环境暂时没有安装 \texttt{PyYAML}，仓库默认配置也仍然能被读取。
+
+\subsection{\texttt{io\_utils.py}}
+
+这是一些小型文件工具函数。
+
+它负责：
+
+\begin{itemize}
+  \item 自动创建目录；
+  \item 列出图像文件；
+  \item 写 JSON 摘要文件。
+\end{itemize}
+
+它本身不做视觉算法，只是供其他模块复用。
+
+\subsection{\texttt{video\_utils.py}}
+
+这是视频层面的底层工具函数。
+
+它负责：
+
+\begin{itemize}
+  \item 读取视频并拆成帧；
+  \item 把帧写回成视频；
+  \item 把一组帧保存成图片序列。
+\end{itemize}
+
+所有 Part 1 的读写流程都依赖这个模块。
+
+\subsection{\texttt{part1.py}}
+
+这是当前最核心的实现文件，也是现在真正有算法内容的主体。
+
+它实现了 Part 1 baseline 的完整流程：
+
+\begin{enumerate}
+  \item 读取输入视频；
+  \item 对每帧运行 YOLOv8-seg；
+  \item 保留指定类别的候选目标；
+  \item 在候选目标内部用 Lucas-Kanade sparse optical flow 判断该目标是否真的是动态目标；
+  \item 用膨胀和连通域清理优化掩码；
+  \item 先用邻近帧的时间中值去借背景；
+  \item 若仍有空洞，再使用 \texttt{cv2.inpaint} 作为补充；
+  \item 保存输入帧、mask、恢复帧、恢复视频和摘要 JSON。
+\end{enumerate}
+
+简单说，\texttt{part1.py} 就是你们当前第一版“能跑通、能交差、还能做对比”的方法。
+
+\subsection{\texttt{eval\_metrics.py}}
+
+这个模块负责评测。
+
+它支持两类指标：
+
+\begin{itemize}
+  \item mask 指标：\texttt{JM}、\texttt{JR}、precision；
+  \item 恢复质量指标：\texttt{PSNR}、\texttt{SSIM}。
+\end{itemize}
+
+这个文件主要在有 GT 数据时使用，比如 DAVIS 或你们自己整理出的带真值子集。
+
+\subsection{\texttt{visualization.py}}
+
+这个模块负责把实验结果整理成报告和 PPT 好用的对比图。
+
+当前生成的图会展示：
+
+\begin{itemize}
+  \item original frame；
+  \item predicted mask；
+  \item restored frame。
+\end{itemize}
+
+它的意义不是“让代码更好看”，而是让你们写报告时直接有图可用。
+
+\subsection{\texttt{part2.py}}
+
+这个文件不是在本仓库里重写 \texttt{SAM 2} 或 \texttt{ProPainter}，而是做一个“适配层”。
+
+它负责：
+
+\begin{itemize}
+  \item 创建 Part 2 的标准输出目录；
+  \item 写入 metadata；
+  \item 生成推荐的调用命令模板。
+\end{itemize}
+
+这样做的目的，是让你们把强模型放在外部仓库里维护，同时保证当前主仓库的组织是统一的。
+
+\subsection{\texttt{part3.py}}
+
+这个模块是给 Part 3 的 failure case 实验准备工作区的。
+
+它负责为某个失败案例创建：
+
+\begin{itemize}
+  \item 关键帧目录；
+  \item mask 目录；
+  \item 编辑后关键帧目录；
+  \item 比较结果目录；
+  \item 记录这个 failure case 目标的说明 JSON。
+\end{itemize}
+
+它的作用是帮助你们把 Part 3 控制在“小范围、有证据、便于展示”的状态，而不是一开始就把 diffusion 扩展做成一个大工程。
+
+\subsection{\texttt{cli.py}}
+
+这是命令行接口的总调度模块。
+
+所有在 \texttt{scripts/project3.py} 里调用的命令，真正都会转到这里来执行。
+
+\subsection{\texttt{\_\_init\_\_.py}}
+
+这是标准的 Python 包标记文件，让 \texttt{project3} 目录可以被 Python 识别成模块。
+
+\section{文档目录说明}
+
+\subsection{\texttt{docs/submission\_checklist.md}}
+
+最终提交前的操作清单。
+
+主要用来确认：
+
+\begin{itemize}
+  \item GitHub 仓库是否整理好；
+  \item 报告是否完整；
+  \item arXiv 是否上传；
+  \item \texttt{videos.zip} 是否包含 mandatory 数据集结果；
+  \item 图表、链接、引用是否齐全。
+\end{itemize}
+
+\subsection{\texttt{docs/presentation\_outline.md}}
+
+这是 8 分钟 progress presentation 的讲稿结构建议。
+
+它的目标不是帮你们写逐字稿，而是提醒你们：在 Week 11/12 的汇报里，最少要覆盖哪些内容。
+
+\subsection{\texttt{docs/pipeline\_notes.md}}
+
+这是一个更偏执行层面的流程说明。
+
+相比 README，它更强调：
+
+\begin{itemize}
+  \item Part 1、Part 2、Part 3 应该如何衔接；
+  \item 什么时候启动 Part 2；
+  \item 什么时候才适合开始 Part 3。
+\end{itemize}
+
+\subsection{\texttt{docs/repo\_guide.md}}
+
+英文版仓库说明。
+
+\subsection{\texttt{docs/repo\_guide\_zh.tex}}
+
+也就是你现在在看的这份中文版 LaTeX 文档。
+
+\section{报告相关文件说明}
+
+\subsection{\texttt{report/outline.md}}
+
+这是一个自然语言版的论文结构草稿。
+
+适合你们在真正写论文前，先决定每节写什么。
+
+\subsection{\texttt{report/main.tex}}
+
+这是论文主文档的 LaTeX 骨架。
+
+当前它只是一个轻量起步模板，不是正式的 CVPR 官方模板。
+
+真正交作业时，你们应该把内容迁移到课程要求的 CVPR 模板中。
+
+\subsection{\texttt{report/references.bib}}
+
+这是参考文献占位文件。
+
+后续必须把 project PDF 里列出的 references 全部补进去，并确保正文里都被引用到。
+
+\section{数据和输出目录说明}
+
+\subsection{\texttt{data/raw/}}
+
+放原始视频和 GT 数据。
+
+建议使用：
+
+\begin{itemize}
+  \item \texttt{data/raw/wild/}
+  \item \texttt{data/raw/bmx/}
+  \item \texttt{data/raw/tennis/}
+  \item \texttt{data/raw/davis/}
+\end{itemize}
+
+\subsection{\texttt{data/frames/}}
+
+如果你们想额外做手动抽帧或中间处理，可以把结果放在这里。
+
+\subsection{\texttt{outputs/part1/}}
+
+存 Part 1 baseline 的输出。
+
+每个实验通常应包含：
+
+\begin{itemize}
+  \item input frames；
+  \item masks；
+  \item restored frames；
+  \item restored video；
+  \item summary JSON；
+  \item comparison figure。
+\end{itemize}
+
+\subsection{\texttt{outputs/part2/}}
+
+存 Part 2 的输出，比如：
+
+\begin{itemize}
+  \item refined masks；
+  \item ProPainter 输入；
+  \item ProPainter 输出；
+  \item metadata 和推荐命令。
+\end{itemize}
+
+\subsection{\texttt{outputs/part3/}}
+
+存 failure case 和关键帧编辑实验的结果。
+
+\subsection{\texttt{metrics/}}
+
+存导出的指标 JSON。
+
+\section{现在已经完成了什么}
+
+目前已经完成的部分：
+
+\begin{itemize}
+  \item 仓库结构；
+  \item baseline Part 1 代码；
+  \item 评测代码；
+  \item 可视化代码；
+  \item Part 2 / Part 3 工作区准备工具；
+  \item 报告和展示用文档骨架。
+\end{itemize}
+
+目前还没有在本地真正跑起来的部分：
+
+\begin{itemize}
+  \item YOLOv8-seg 实际推理，因为本地尚未安装相关依赖；
+  \item SAM 2 / ProPainter，因为它们要在服务器环境和 GPU 上运行；
+  \item 完整实验，因为数据还没有放进仓库目录。
+\end{itemize}
+
+\section{为什么现在不要继续在本地硬跑}
+
+因为你们的 GPU 资源在服务器上，所以本地当前阶段更适合做：
+
+\begin{itemize}
+  \item 仓库整理；
+  \item 文档准备；
+  \item 代码结构搭建；
+  \item 路线设计；
+  \item 报告模板和参考文献准备。
+\end{itemize}
+
+真正的模型推理、长视频处理、SOTA 模型接入，都应该放到服务器上做。
+
+\section{接下来在服务器上的推荐操作顺序}
+
+\subsection*{Step 1：同步当前仓库到服务器}
+
+把这个仓库 clone 到服务器工作目录，或者直接上传整个项目文件夹。
+
+\subsection*{Step 2：创建环境并安装依赖}
+
+推荐命令：
+
+\begin{Verbatim}[fontsize=\small]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+\end{Verbatim}
+
+如果服务器已有 CUDA 版本的 PyTorch，请优先保证 \texttt{ultralytics}、SAM 2 和 ProPainter 与那套环境兼容。
+
+\subsection*{Step 3：放置 mandatory 数据集}
+
+把视频放到：
+
+\begin{Verbatim}[fontsize=\small]
+data/raw/wild/
+data/raw/bmx/
+data/raw/tennis/
+\end{Verbatim}
+
+如果你们想拿更强的量化结果，也把 DAVIS 放好。
+
+\subsection*{Step 4：先跑 Part 1 baseline}
+
+推荐先跑 wild video，再跑 bmx 和 tennis。
+
+示例命令：
+
+\begin{Verbatim}[fontsize=\small]
+python3 scripts/project3.py part1 \
+  --config configs/project3.yaml \
+  --video data/raw/wild/corridor.mp4 \
+  --experiment wild_corridor
+\end{Verbatim}
+
+先做 Part 1 的原因：
+
+\begin{itemize}
+  \item 它最快形成第一个完整闭环；
+  \item 它能尽快产出 progress presentation 可用结果；
+  \item 它给 Part 2 提供清晰的对比基线。
+\end{itemize}
+
+\subsection*{Step 5：人工检查输出}
+
+重点看四件事：
+
+\begin{itemize}
+  \item mask 是否只覆盖动态目标；
+  \item 细结构是否被漏掉；
+  \item 背景是否明显模糊；
+  \item 是否有时间闪烁。
+\end{itemize}
+
+这个步骤不能省，因为报告里需要 qualitative analysis，不是只贴指标。
+
+\subsection*{Step 6：准备 Part 2}
+
+先运行：
+
+\begin{Verbatim}[fontsize=\small]
+python3 scripts/project3.py part2-prepare \
+  --config configs/project3.yaml \
+  --video data/raw/wild/corridor.mp4 \
+  --experiment wild_corridor
+\end{Verbatim}
+
+然后再做下面几件事：
+
+\begin{itemize}
+  \item clone 或安装 \texttt{SAM 2}；
+  \item clone 或安装 \texttt{ProPainter}；
+  \item 在 \texttt{configs/project3.yaml} 中写入服务器上的真实路径和 checkpoint；
+  \item 根据输出的推荐命令模板真正执行模型。
+\end{itemize}
+
+\subsection*{Step 7：计算指标}
+
+一旦有 GT 支持的数据，就运行：
+
+\begin{itemize}
+  \item \texttt{eval-mask}；
+  \item \texttt{eval-video}。
+\end{itemize}
+
+目标是尽快得到：
+
+\begin{itemize}
+  \item \texttt{JM / JR}；
+  \item \texttt{PSNR / SSIM}。
+\end{itemize}
+
+\subsection*{Step 8：最后再启动 Part 3}
+
+不要过早做 diffusion 扩展。
+
+应当满足以下条件后再开始：
+
+\begin{itemize}
+  \item Part 1 已稳定；
+  \item Part 2 已稳定；
+  \item 你们已经能明确指出 ProPainter 的真实 failure case。
+\end{itemize}
+
+这样才能保证 Part 3 是一个“有针对性的扩展”，而不是变成无底洞。
+
+\section{两人小组的推荐分工}
+
+\subsection*{同学 A}
+
+\begin{itemize}
+  \item 搭服务器环境；
+  \item 跑 Part 1 baseline；
+  \item 检查 wild / bmx / tennis 的输出效果；
+  \item 整理 baseline 的可视化图。
+\end{itemize}
+
+\subsection*{同学 B}
+
+\begin{itemize}
+  \item 整理数据集目录；
+  \item 准备报告模板与 references；
+  \item 阅读 SAM 2 / ProPainter 的安装和运行要求；
+  \item 准备 progress presentation 内容。
+\end{itemize}
+
+等 Part 1 稳定后，两人再一起合流做 Part 2。
+
+\section{最后的实用提醒}
+
+\begin{itemize}
+  \item 不要在 Part 1 和 Part 2 还没稳定前就过度投入 Part 3；
+  \item 不要把定性图拖到最后再整理；
+  \item 不要拖延 references 管理，因为课程明确要求引用给定文献；
+  \item 不要默认服务器路径和本地路径一致，迁移后要检查 \texttt{configs/project3.yaml}。
+\end{itemize}
+
+\section{结论}
+
+现在这个仓库的定位不是“已经完成所有实验”，而是“已经把项目工程骨架、baseline 逻辑、评测接口和文档模板都搭好”。你们下一阶段的重点不是继续本地开发，而是把这套结构迁移到服务器，先跑通 Part 1，再逐步接入 Part 2 和 Part 3。
+
+\end{document}

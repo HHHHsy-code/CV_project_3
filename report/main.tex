@@ -1,0 +1,94 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[margin=0.75in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\title{Video Object Removal and Inpainting for AIAA 3201 Project 3}
+\author{Student 1 \and Student 2}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study video object removal and background restoration for dynamic scenes.
+Our pipeline includes a classical baseline based on object segmentation, sparse optical flow, and spatial-temporal inpainting, followed by a stronger video foundation model pipeline for comparison.
+\textbf{GitHub Repository:} \url{https://github.com/your-repo-here}
+\end{abstract}
+
+\section{Introduction}
+Video object removal aims to erase dynamic foreground objects while recovering a temporally consistent background.
+This task is useful for scene cleanup, editing, robotics, and video understanding.
+In this project, we compare a controllable classical baseline with a modern AI-driven pipeline, then analyze failure cases where the background is never visible.
+
+\section{Related Work}
+Summarize the required references from the project instruction PDF here.
+Group them by object detection, segmentation, tracking, and video inpainting.
+
+\section{Method}
+\subsection{Part 1: Classical Baseline}
+Describe the YOLOv8-seg proposal stage, optical-flow-based dynamic filtering, mask dilation, temporal borrowing, and \texttt{cv2.inpaint} fallback.
+
+\subsection{Part 2: AI-driven Pipeline}
+Describe how SAM~2 produces stronger video masks and how ProPainter restores missing regions with temporal propagation and transformer priors.
+
+\subsection{Part 3: Failure-case Extension}
+Describe the keyframe-only generative repair setup and why it matters when the hidden background never appears in the observed video.
+
+\section{Experiments}
+\subsection{Datasets}
+Describe the wild video, \texttt{bmx-trees}, \texttt{tennis}, and DAVIS subset.
+
+\subsection{Metrics}
+Report $J_M$, $J_R$, PSNR, and SSIM when ground truth is available.
+
+\subsection{Quantitative Results}
+\begin{table}[t]
+  \centering
+  \caption{Mask quality comparison.}
+  \begin{tabular}{lcc}
+    \toprule
+    Method & $J_M$ & $J_R$ \\
+    \midrule
+    Part 1 Baseline & -- & -- \\
+    Part 2 Pipeline & -- & -- \\
+    Part 3 Extension & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \caption{Restoration quality comparison.}
+  \begin{tabular}{lcc}
+    \toprule
+    Method & PSNR & SSIM \\
+    \midrule
+    Part 1 Baseline & -- & -- \\
+    Part 2 Pipeline & -- & -- \\
+    Part 3 Extension & -- & -- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Qualitative Results}
+\begin{figure}[t]
+  \centering
+  \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
+  \caption{Representative comparison among original frames, masks, and restored outputs.}
+\end{figure}
+
+\subsection{Failure Analysis}
+Discuss thin structures, inaccurate masks, temporal flicker, and scenes where the hidden background is never observed.
+
+\section{Conclusion}
+Summarize the main findings, limitations, and next steps.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

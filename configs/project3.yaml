@@ -1,0 +1,56 @@
+project:
+  name: "video-object-removal-inpainting"
+  seed: 3201
+
+paths:
+  outputs_root: "outputs"
+  metrics_root: "metrics"
+
+part1:
+  detector:
+    model: "yolov8n-seg.pt"
+    classes:
+      - person
+      - bicycle
+      - car
+      - motorcycle
+      - bus
+      - truck
+    conf_threshold: 0.25
+    iou_threshold: 0.45
+    device: null
+  motion:
+    max_corners: 150
+    quality_level: 0.01
+    min_distance: 4
+    block_size: 7
+    lk_win_size: 21
+    lk_max_level: 3
+    motion_threshold: 1.5
+  mask:
+    dilation_kernel: 7
+    dilation_iters: 2
+    min_area: 256
+  inpainting:
+    temporal_window: 15
+    use_temporal_fill: true
+    use_cv2_inpaint: true
+    cv2_radius: 3
+    cv2_method: "telea"
+  visualization:
+    representative_frames: 6
+
+part2:
+  sam2:
+    repo_dir: "external/sam2"
+    checkpoint: ""
+    config: ""
+  propainter:
+    repo_dir: "external/ProPainter"
+    checkpoint_dir: ""
+
+part3:
+  diffusion:
+    enabled: false
+    tool: "manual"
+    notes: "Use keyframe-only inpainting for failure cases."
