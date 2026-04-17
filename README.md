@@ -163,6 +163,15 @@ python3 scripts/project3.py figures \
   --output outputs/part1/wild_corridor/figures/comparison_grid.png
 ```
 
+Create a Part 1 vs Part 2 figure grid after running ProPainter:
+
+```bash
+python3 scripts/project3.py compare-methods \
+  --part1-dir outputs/part1/wild_corridor \
+  --part2-video outputs/part2/wild_corridor_propainter/wild_corridor/inpaint_out.mp4 \
+  --output outputs/comparisons/wild_corridor_part1_vs_part2.png
+```
+
 ## Part 2 and Part 3 workflow
 
 The repository does not vendor third-party SOTA code. Instead, it provides:

@@ -14,13 +14,40 @@ This gives you a full end-to-end classical baseline for the presentation and for
 
 ## Part 2
 
-Recommended structure:
+Recommended staged structure:
+
+### Stage A: controlled restoration comparison
+
+This is the current recommended first Part 2 experiment:
+
+1. Reuse the masks produced by Part 1
+2. Keep the removal region fixed
+3. Replace only the restoration backend with `ProPainter`
+4. Compare:
+   - Part 1: temporal median + `cv2.inpaint`
+   - Part 2: `ProPainter`
+
+Why this first:
+
+- lower engineering risk
+- clear interpretation of gains
+- faster path to presentation-ready evidence
+
+### Stage B: targeted mask upgrade
+
+After Stage A is stable, upgrade only the weak-mask failure cases:
 
 1. Run Part 1 or a detector-only pass to generate rough boxes
 2. Use those prompts to initialize `SAM 2`
 3. Save refined masks under `outputs/part2/<experiment>/masks`
 4. Run `ProPainter`
-5. Save restored outputs under `outputs/part2/<experiment>/propainter_output`
+5. Compare the original failure with the improved mask + ProPainter output
+
+Current recommended target:
+
+- `wild_video2`
+- Failure source: object not consistently masked
+- Goal: improve mask completeness without changing the inpainting backend
 
 The command templates are emitted by:
 
@@ -35,10 +62,13 @@ python3 scripts/project3.py part2-prepare \
 
 Keep the scope narrow:
 
-1. Identify one or two clear `ProPainter` failures
-2. Extract keyframes and masks
-3. Apply diffusion inpainting only to those keyframes
-4. Compare before/after and discuss why propagation-only methods fail
+1. Identify one or two clear failure cases
+2. Determine whether the root cause is:
+   - weak masks
+   - inpainting failure despite good masks
+3. If the root cause is missing background content, extract keyframes and masks
+4. Apply diffusion inpainting only to those keyframes
+5. Compare before/after and discuss why propagation-only methods fail
 
 Prepare a workspace with:
 

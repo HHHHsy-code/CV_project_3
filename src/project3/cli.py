@@ -10,7 +10,7 @@ from .io_utils import write_json
 from .part1 import BaselineVideoObjectRemoval
 from .part2 import Part2Adapters
 from .part3 import prepare_failure_case_workspace
-from .visualization import generate_comparison_grid
+from .visualization import generate_comparison_grid, generate_method_comparison_grid
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +40,14 @@ def build_parser() -> argparse.ArgumentParser:
     figures.add_argument("--input", required=True)
     figures.add_argument("--output", required=True)
     figures.add_argument("--samples", type=int, default=6)
+
+    compare_methods = subparsers.add_parser(
+        "compare-methods", help="Generate Original/Mask/Part1/Part2 comparison figures"
+    )
+    compare_methods.add_argument("--part1-dir", required=True)
+    compare_methods.add_argument("--part2-video", required=True)
+    compare_methods.add_argument("--output", required=True)
+    compare_methods.add_argument("--samples", type=int, default=6)
 
     part2 = subparsers.add_parser("part2-prepare", help="Prepare a Part 2 workspace and command templates")
     part2.add_argument("--config", required=True)
@@ -90,6 +98,16 @@ def main() -> None:
 
     if args.command == "figures":
         output = generate_comparison_grid(args.input, args.output, samples=args.samples)
+        print({"figure": str(output)})
+        return
+
+    if args.command == "compare-methods":
+        output = generate_method_comparison_grid(
+            args.part1_dir,
+            args.part2_video,
+            args.output,
+            samples=args.samples,
+        )
         print({"figure": str(output)})
         return
 
