@@ -59,9 +59,12 @@ Video Object Removal and Background Inpainting with Classical Motion Filtering a
 
 - `bmx-trees` and `tennis` are the main qualitative comparison sequences.
 - `wild_video1` is the real-scene success case.
-- `wild_video2` is the main failure case caused by weak mask generation.
+- `wild_video2` is the main failure-to-improvement case:
+  - original failure caused by weak mask generation
+  - improved version obtained with prompt-guided `SAM 2` refinement before ProPainter
 - The central claim already supported by current experiments:
   - with the same masks, ProPainter produces better restoration quality than temporal median plus `cv2.inpaint`.
+  - stronger mask propagation can further improve final removal quality on failure cases.
 
 ### Quantitative material already available
 
@@ -76,8 +79,9 @@ Video Object Removal and Background Inpainting with Classical Motion Filtering a
 
 ### Quantitative material still worth adding
 
-- one DAVIS subset experiment with `PSNR / SSIM`, if time allows
-- mask-improvement evidence for `wild_video2`
+- one DAVIS subset experiment with additional `JM / JR`, if time allows
+- optional synthetic masked-frame benchmark for `PSNR / SSIM`
+- optional extra mask-improvement evidence for `wild_video2` if a second prompt setting is tested
 
 ## 5. Conclusion
 

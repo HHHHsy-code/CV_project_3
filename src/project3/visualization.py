@@ -119,13 +119,14 @@ def generate_method_comparison_grid(
     part2_video: str | Path,
     output_path: str | Path,
     samples: int = 6,
+    mask_dir: str | Path | None = None,
 ) -> Path:
     """Create a report-ready Original/Mask/Part1/Part2 comparison grid."""
 
     cv2 = _require_cv2()
     part1_dir = Path(part1_dir)
     input_paths = list_images(part1_dir / "input_frames")
-    mask_paths = list_images(part1_dir / "masks")
+    mask_paths = list_images(mask_dir) if mask_dir is not None else list_images(part1_dir / "masks")
     part1_paths = list_images(part1_dir / "restored_frames")
     part2_frames = read_video(part2_video).frames
 

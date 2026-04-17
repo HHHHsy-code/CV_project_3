@@ -140,3 +140,27 @@ def evaluate_frame_dir(pred_dir: str | Path, gt_dir: str | Path, output: str | P
     if output is not None:
         write_json(metrics, output)
     return metrics
+
+
+def summarize_mask_dir(directory: str | Path, output: str | Path | None = None) -> Dict:
+    masks = _load_binary_masks(directory)
+    if not masks:
+        raise ValueError("No masks found.")
+
+    area_ratios = [float(mask.mean()) for mask in masks]
+    non_empty = [ratio for ratio in area_ratios if ratio > 0.0]
+    non_empty_frames = [idx for idx, ratio in enumerate(area_ratios) if ratio > 0.0]
+
+    summary = {
+        "num_frames": len(masks),
+        "non_empty_frames": len(non_empty_frames),
+        "temporal_coverage": _safe_div(len(non_empty_frames), len(masks)),
+        "mean_area_ratio_all": float(np.mean(area_ratios)),
+        "mean_area_ratio_non_empty": float(np.mean(non_empty)) if non_empty else 0.0,
+        "max_area_ratio": float(np.max(area_ratios)),
+        "first_non_empty_frame": int(non_empty_frames[0]) if non_empty_frames else None,
+        "last_non_empty_frame": int(non_empty_frames[-1]) if non_empty_frames else None,
+    }
+    if output is not None:
+        write_json(summary, output)
+    return summary

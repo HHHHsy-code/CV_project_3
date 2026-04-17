@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import load_yaml_config
-from .eval_metrics import evaluate_frame_dir, evaluate_mask_dir
+from .eval_metrics import evaluate_frame_dir, evaluate_mask_dir, summarize_mask_dir
 from .io_utils import write_json
 from .part1 import BaselineVideoObjectRemoval
 from .part2 import Part2Adapters
@@ -36,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
     eval_video.add_argument("--gt", required=True)
     eval_video.add_argument("--output", required=True)
 
+    summarize_mask = subparsers.add_parser("summarize-mask", help="Summarize temporal coverage and area of a mask dir")
+    summarize_mask.add_argument("--pred", required=True)
+    summarize_mask.add_argument("--output", required=True)
+
     figures = subparsers.add_parser("figures", help="Generate comparison figures")
     figures.add_argument("--input", required=True)
     figures.add_argument("--output", required=True)
@@ -48,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare_methods.add_argument("--part2-video", required=True)
     compare_methods.add_argument("--output", required=True)
     compare_methods.add_argument("--samples", type=int, default=6)
+    compare_methods.add_argument("--mask-dir", default=None, help="Optional mask directory override")
 
     part2 = subparsers.add_parser("part2-prepare", help="Prepare a Part 2 workspace and command templates")
     part2.add_argument("--config", required=True)
@@ -96,6 +101,11 @@ def main() -> None:
         print(result)
         return
 
+    if args.command == "summarize-mask":
+        result = summarize_mask_dir(args.pred, args.output)
+        print(result)
+        return
+
     if args.command == "figures":
         output = generate_comparison_grid(args.input, args.output, samples=args.samples)
         print({"figure": str(output)})
@@ -107,6 +117,7 @@ def main() -> None:
             args.part2_video,
             args.output,
             samples=args.samples,
+            mask_dir=args.mask_dir,
         )
         print({"figure": str(output)})
         return

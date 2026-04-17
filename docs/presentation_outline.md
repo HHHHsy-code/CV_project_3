@@ -21,7 +21,7 @@ This version is aligned with the current project status, not the original placeh
   - `wild_video2`
 - Wild videos are self-recorded real scenes with a single person walking across a fixed-background scene.
 - Optional next-step dataset:
-  - DAVIS subset for stronger GT-backed evaluation
+  - DAVIS subset for stronger mask evaluation
 
 ## Slide 3: Part 1 baseline pipeline
 
@@ -74,18 +74,20 @@ This version is aligned with the current project status, not the original placeh
   - good real-scene success case
   - demonstrates generalization beyond provided sample clips
 - `wild_video2`
-  - important failure case
-  - failure source is weak mask generation, not ProPainter itself
-  - if the object is not masked, neither Part 1 nor Part 2 can remove it
+  - important failure-to-improvement case
+  - original failure source is weak mask generation, not ProPainter itself
+  - in the original setup, if the object is not masked, neither Part 1 nor Part 2 can remove it
+  - after prompt-guided `SAM 2` refinement, the target is covered more consistently and the final removal is visibly better
 
 ## Slide 8: Next step and final delivery path
 
 - Immediate next technical task:
-  - improve `wild_video2` masks with `SAM 2` or prompt-guided propagation
-  - keep `ProPainter` fixed
-  - show improved removal completeness
+  - package the `wild_video2` before/after comparison as a formal experiment result
+  - add one more quantitative experiment:
+    - DAVIS for `JM / JR`, or
+    - a synthetic masked-frame benchmark for `PSNR / SSIM`
 - Final packaging path:
   - report with `bmx-trees` and `tennis` as main results
   - `wild_video1` as success case
-  - `wild_video2` as failure case and improvement target
-  - add one GT-backed quantitative experiment if time allows
+  - `wild_video2` as a failure case plus improved case
+  - add one more quantitative experiment if time allows

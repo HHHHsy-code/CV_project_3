@@ -94,7 +94,7 @@ If you have mask ground truth or clean targets, organize them as:
 
 ```text
 data/raw/davis/<sequence>/masks/
-data/raw/davis/<sequence>/gt_frames/
+data/raw/davis/<sequence>/gt_frames/   # only if you build a synthetic benchmark with clean targets
 ```
 
 ## Baseline usage
@@ -195,7 +195,7 @@ The concrete adapter commands are documented in `docs/pipeline_notes.md`.
 - `wild corridor`: fixed camera, pedestrians crossing the scene
 - `bmx-trees`: validate removal under repeated motion and thin structures
 - `tennis`: validate removal on faster motion and more occlusion
-- `DAVIS subset`: compute metrics and support claims for the report
+- `DAVIS subset`: strengthen mask evaluation and support claims for the report
 
 ## Deliverables checklist
 

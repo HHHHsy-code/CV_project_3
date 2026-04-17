@@ -18,33 +18,52 @@
 We study video object removal and background restoration for dynamic scenes.
 Our current pipeline includes a classical baseline based on object segmentation, sparse optical flow, temporal median borrowing, and \texttt{cv2.inpaint}, followed by a stronger video inpainting backend using ProPainter.
 Rather than changing every component at once, we first keep the removal masks fixed and replace only the restoration stage, which gives a controlled comparison between classical and modern video completion methods.
-Our current results on \texttt{bmx-trees}, \texttt{tennis}, and two self-recorded wild videos show that ProPainter substantially improves visual quality over the baseline restoration module, while remaining limited by the quality of the upstream masks.
-\textbf{GitHub Repository:} \url{https://github.com/your-repo-here}
+Our current results on \texttt{bmx-trees}, \texttt{tennis}, and two self-recorded wild videos show that ProPainter substantially improves visual quality over the baseline restoration module, while a prompt-guided SAM~2 refinement step further improves a real-scene failure case by strengthening the upstream masks.
+\textbf{GitHub Repository:} \url{https://github.com/HHHHsy-code/CV_project_3}
 \end{abstract}
 
 \section{Introduction}
 Video object removal aims to erase dynamic foreground objects while recovering a temporally consistent background.
 This task is useful for scene cleanup, editing, robotics, and video understanding.
 In this project, we compare a controllable classical baseline with a modern AI-driven pipeline, then analyze failure cases caused by weak automatic masks.
-Our near-term goal is not only to produce a working baseline, but to build a clean experimental story: keep the removal region fixed, replace the restoration backend, and measure or visualize the resulting quality gap.
+Our near-term goal is not only to produce a working system, but also to build a clear experimental story with interpretable ablations.
+To do this, we deliberately separate the two main sources of performance gain: mask quality and restoration quality.
+We first keep the removal region fixed and replace only the restoration backend, which gives a controlled comparison between classical completion and a stronger video inpainting model.
+We then focus on one real-scene failure case and improve only the masks with prompt-guided SAM~2, allowing us to study whether better masks alone improve the final result.
 
 \section{Related Work}
-Summarize the required references from the project instruction PDF here.
-Group them by object detection, segmentation, tracking, and video inpainting.
+Modern video object removal depends on several subproblems: detecting the target object, segmenting it accurately, propagating masks across time, and restoring the hidden background.
+For object localization and instance segmentation, two representative lines of work are region-based methods such as Mask R-CNN~\cite{he2017mask} and transformer-based detectors such as DETR~\cite{carion2020detr}.
+Although our current implementation uses YOLOv8-seg as the practical detector, these works provide the broader context for modern object-centric mask generation.
+
+For general-purpose interactive segmentation, Segment Anything (SAM)~\cite{kirillov2023sam} shows that promptable foundation segmentation models can generalize across diverse scenes.
+SAM~2 extends this idea from static images to images and videos, making prompt-guided mask propagation practical for video object segmentation and editing workflows~\cite{ravi2024sam2}.
+Related tracking-oriented work such as Tracking Anything with Decoupled Video Segmentation also highlights the importance of robust temporal mask propagation when the downstream task depends on accurate frame-wise target coverage~\cite{cheng2023tracking}.
+
+For restoration, ProPainter~\cite{zhou2023propainter} is a strong recent video inpainting model that combines propagation and transformer components to improve temporal consistency and texture completion.
+This is directly relevant to our project because it lets us hold the masks fixed and isolate the contribution of the restoration backend.
+For evaluation context, the DAVIS benchmark remains a standard reference for video object segmentation experiments~\cite{perazzi2016davis}, even though raw DAVIS masks do not by themselves provide the clean-background ground truth required for direct object-removal PSNR or SSIM.
 
 \section{Method}
 \subsection{Part 1: Classical Baseline}
-Describe the YOLOv8-seg proposal stage, optical-flow-based dynamic filtering, mask dilation, temporal borrowing, and \texttt{cv2.inpaint} fallback.
+Our baseline follows a modular classical pipeline.
+We first use YOLOv8-seg to generate category-aware instance masks for likely dynamic objects such as people, bicycles, and vehicles.
+Because object detection alone is insufficient in scenes that contain static foreground objects, we further filter each instance by sparse Lucas-Kanade optical flow computed inside the predicted mask region.
+Only instances with sufficient average motion magnitude are retained as dynamic targets.
+The resulting binary masks are then dilated and cleaned with connected-component filtering so that thin boundaries and fragmented regions are less likely to be missed during removal.
+For background restoration, we first borrow pixels from nearby frames with a temporal median strategy and then apply \texttt{cv2.inpaint} as a fallback to close remaining holes.
+This baseline is deliberately simple and transparent: each stage can be inspected independently, which makes later failure analysis easier.
 
 \subsection{Part 2: AI-driven Pipeline}
-Our current Part 2 experiment uses a controlled setup: we reuse the masks produced by Part 1 and replace only the restoration stage with ProPainter.
+Our current Part 2 experiment uses a controlled setup: we reuse the masks produced by Part 1 and replace only the restoration stage with ProPainter~\cite{zhou2023propainter}.
 This isolates the contribution of the video inpainting model and makes the qualitative comparison easier to interpret.
-The next targeted upgrade is to improve weak failure-case masks, especially on \texttt{wild\_video2}, using prompt-guided SAM~2 propagation while keeping ProPainter fixed.
+In this sense, Part 2 is not just ``a stronger model''; it is a controlled replacement of one subsystem inside the same overall pipeline.
+We additionally refine a failure case on \texttt{wild\_video2} using prompt-guided SAM~2 propagation~\cite{ravi2024sam2} while keeping ProPainter fixed, which lets us attribute the remaining gain to better mask quality rather than a different restoration backend.
 
 \subsection{Part 3: Failure-case Extension}
-The current most informative failure case is \texttt{wild\_video2}, where the moving person is not consistently covered by the automatic mask generator.
-This means the failure is not caused by the inpainting backend itself; the object is simply never marked for removal in several frames.
-The most direct extension is therefore a targeted mask-improvement experiment, optionally followed by keyframe-level generative repair if the hidden background is never sufficiently observed.
+The current most informative failure case is \texttt{wild\_video2}, where the moving person is not consistently covered by the automatic mask generator in the baseline system.
+This means the original failure is not caused by the inpainting backend itself; the object is simply never marked for removal in several frames.
+We therefore introduce a targeted mask-improvement experiment based on prompt-guided SAM~2 propagation~\cite{ravi2024sam2}, and we use the resulting refined masks with the same ProPainter backend to measure whether better masks alone improve the final removal result.
 
 \section{Experiments}
 \subsection{Datasets}
@@ -52,12 +71,22 @@ We currently use four sequences:
 \texttt{bmx-trees}, \texttt{tennis}, \texttt{wild\_video1}, and \texttt{wild\_video2}.
 The first two are provided course sequences with mask annotations for baseline evaluation.
 The latter two are self-recorded real-scene videos with a single walking person crossing a mostly fixed background.
-An optional DAVIS subset remains the preferred next source for GT-backed restoration metrics.
+An optional DAVIS subset~\cite{perazzi2016davis} remains a useful next source for additional mask evaluation.
+If we need restoration metrics such as PSNR or SSIM, we must construct a synthetic masked-frame benchmark with known clean targets rather than relying on raw DAVIS object masks alone.
 
 \subsection{Metrics}
-Report $J_M$, $J_R$, PSNR, and SSIM when ground truth is available.
+For mask quality, we report $J_M$ and $J_R$, which correspond to region similarity and recall-style mask coverage, together with mean precision for additional interpretation.
+These metrics are directly applicable to \texttt{bmx-trees} and \texttt{tennis}, where foreground mask annotations are available.
+For restoration quality, PSNR and SSIM are only meaningful when a clean target frame exists.
+Since our current wild-video experiments do not provide clean-background ground truth, the main restoration evidence in this draft is qualitative rather than pixel-wise.
 
 \subsection{Quantitative Results}
+Table~1 reports the current Part 1 mask quality results.
+The two provided benchmark sequences exhibit different failure modes.
+On \texttt{bmx-trees}, the baseline achieves high recall but low precision, which matches the visual observation that the masks are often too large and include extra background regions.
+On \texttt{tennis}, the masks are much tighter, yielding a considerably stronger baseline for the later restoration comparison.
+This difference in baseline mask quality is useful for interpretation: when ProPainter improves both sequences despite very different mask precision, the gain is more plausibly attributed to the restoration backend than to a trivial change in mask shape alone.
+
 \begin{table}[t]
   \centering
   \caption{Current Part 1 mask quality results.}
@@ -80,31 +109,85 @@ Report $J_M$, $J_R$, PSNR, and SSIM when ground truth is available.
     \midrule
     Part 1 baseline & pending & pending \\
     Part 2 with ProPainter & pending & pending \\
-    DAVIS subset extension & planned & planned \\
+    Synthetic benchmark extension & planned & planned \\
     \bottomrule
   \end{tabular}
 \end{table}
 
+\begin{table}[t]
+  \centering
+  \caption{Lightweight mask-summary comparison on \texttt{wild\_video2}.}
+  \begin{tabular}{lcc}
+    \toprule
+    Setting & Coverage & Mean area \\
+    \midrule
+    Part 1 mask & 0.547 & 0.0166 \\
+    SAM~2 refined mask & 0.642 & 0.0115 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+At the current project stage, the restoration story is best supported by controlled qualitative comparison rather than PSNR or SSIM.
+Specifically, we keep the removal masks fixed and compare the classical temporal restoration module against ProPainter.
+This design removes mask quality as a confounder and lets us isolate the benefit of a stronger video completion backend.
+As a lightweight additional experiment, we also prepared a temporal mask-summary tool for the \texttt{wild\_video2} failure case.
+This lets us compare how many frames contain a non-empty target mask before and after SAM~2 refinement, together with mean mask area ratio.
+Although this is not a replacement for full GT-backed metrics, it provides a compact quantitative check that the refined masks are more temporally stable than the original automatic masks.
+For \texttt{wild\_video2}, SAM~2 refinement increases temporal mask coverage from $0.547$ to $0.642$ and raises the number of non-empty mask frames from $104$ to $122$.
+At the same time, the mean mask area ratio drops from $0.0166$ to $0.0115$, indicating that the improved masks are not simply larger; instead, they are more temporally stable and spatially tighter around the walking person.
+
 \subsection{Qualitative Results}
 The strongest current qualitative comparisons come from \texttt{bmx-trees} and \texttt{tennis}.
 In both cases, keeping the masks fixed and replacing the restoration backend with ProPainter significantly reduces blocky artifacts, transparent ghosting, and inconsistent texture synthesis.
-\texttt{wild\_video1} serves as a real-scene success case, while \texttt{wild\_video2} highlights the sensitivity of the overall pipeline to mask completeness.
+\texttt{wild\_video1} serves as a real-scene success case.
+\texttt{wild\_video2} now serves as a failure-to-improvement case: the original Part~2 result shows that weak masks prevent complete removal, while the SAM~2-refined version covers the walking person more consistently and produces a visibly cleaner restoration.
 
 \begin{figure}[t]
   \centering
-  \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
-  \caption{Recommended final figure: original frame, removal mask, Part 1 restoration, and Part 2 restoration on \texttt{bmx-trees} or \texttt{tennis}.}
+  \IfFileExists{assets/bmx_trees_part1_vs_part2.png}{
+    \includegraphics[width=\linewidth]{assets/bmx_trees_part1_vs_part2.png}
+  }{
+    \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
+  }
+  \caption{Main qualitative comparison on \texttt{bmx-trees}. Using the same masks, ProPainter produces more coherent background restoration than the classical Part 1 backend.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \IfFileExists{assets/tennis_part1_vs_part2.png}{
+    \includegraphics[width=\linewidth]{assets/tennis_part1_vs_part2.png}
+  }{
+    \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
+  }
+  \caption{Second controlled comparison on \texttt{tennis}. Even with stronger baseline masks, ProPainter still reduces ghosting and produces cleaner court textures than the Part 1 backend.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \IfFileExists{assets/wild_video2_part1_vs_sam2_part2.png}{
+    \includegraphics[width=\linewidth]{assets/wild_video2_part1_vs_sam2_part2.png}
+  }{
+    \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
+  }
+  \caption{Failure-to-improvement case on \texttt{wild\_video2}. Prompt-guided SAM~2 refinement yields better masks and a cleaner final restoration than the original failure case.}
 \end{figure}
 
 \subsection{Failure Analysis}
 The most important current failure mode is weak mask generation.
-On \texttt{wild\_video2}, the moving person is only partially captured by the baseline mask generator, so both the classical baseline and ProPainter fail to remove the target in missed frames.
-This makes \texttt{wild\_video2} an effective targeted case for prompt-guided SAM~2 refinement.
+In the original \texttt{wild\_video2} setup, the moving person is only partially captured by the baseline mask generator, so both the classical baseline and ProPainter fail to remove the target in missed frames.
+After prompt-guided SAM~2 refinement, the masks cover the person more consistently in the key frames and the final restored video is visibly improved, confirming that mask completeness was the main bottleneck in this case.
+This interpretation is also supported by the lightweight mask-summary statistics: the refined masks begin slightly earlier, persist later, and remain non-empty for $18$ additional frames compared with the original Part 1 masks.
 Additional failure modes include overly large masks on thin structures in \texttt{bmx-trees} and residual transparency artifacts in the Part 1 restoration output.
+This analysis is important because it clarifies that not all object-removal failures originate from the inpainting network.
+In our pipeline, restoration quality depends on both a good completion model and sufficiently accurate masks.
+The \texttt{wild\_video2} case therefore acts as a useful diagnostic example: once the mask quality is improved while the restoration backend is held fixed, the final output improves as well.
 
 \section{Conclusion}
-Our current experiments already support a clear intermediate conclusion: when the removal mask is held fixed, ProPainter provides substantially better restoration quality than the classical temporal median plus \texttt{cv2.inpaint} baseline.
-The main remaining bottleneck is mask quality rather than inpainting quality, which motivates a targeted next-step experiment using stronger video mask propagation on \texttt{wild\_video2}.
+Our current experiments support two clear conclusions.
+First, when the removal mask is held fixed, ProPainter provides substantially better restoration quality than the classical temporal median plus \texttt{cv2.inpaint} baseline.
+Second, on a real-scene failure case, stronger prompt-guided mask propagation with SAM~2 further improves final object removal quality, confirming that mask quality remains a key bottleneck in the full pipeline.
+Taken together, these results suggest that our project has already moved beyond a single baseline implementation: we now have a reproducible baseline, a controlled Part 1 versus Part 2 comparison, and a targeted failure-to-improvement case study.
+The most natural remaining extension is to add either more mask-focused evaluation on an annotated subset or a synthetic benchmark for restoration metrics, but the current pipeline is already sufficient to support a coherent final report and presentation.
 
 \bibliographystyle{plain}
 \bibliography{references}

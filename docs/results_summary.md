@@ -49,11 +49,24 @@ Only Part 1 mask metrics are currently available.
 
 ### `wild_video2`
 
-- Best current failure case.
-- The issue is not ProPainter itself.
-- The main failure is upstream mask generation: the moving person is not consistently covered by the automatic mask.
-- Because the object is not marked for removal, neither Part 1 nor Part 2 can remove it.
-- Recommended as the target case for `SAM 2` or prompt-guided mask refinement.
+- Best current failure-to-improvement case.
+- Baseline failure:
+  - the issue is not ProPainter itself
+  - the main failure is upstream mask generation
+  - the moving person is not consistently covered by the automatic Part 1 mask
+  - because the object is not marked for removal, the original Part 2 output still leaves the target visible
+- Improved version:
+  - we used a prompt-guided `SAM 2` mask refinement step before ProPainter
+  - the refined masks cover the walking person much more consistently in the key frames
+  - the final restored video removes the target more completely than the original `wild_video2` Part 2 result
+- Lightweight quantitative support:
+  - `non_empty_frames` increases from `104` to `122`
+  - `temporal_coverage` increases from `0.547` to `0.642`
+  - `mean_area_ratio_all` decreases from `0.0166` to `0.0115`
+  - this suggests the refined masks are both more temporally stable and spatially tighter
+- This sequence should now be shown as:
+  - original failure case: `wild_video2_part1_vs_part2.png`
+  - improved case: `wild_video2_part1_vs_sam2_part2.png`
 
 ## Recommended report assets
 
@@ -61,6 +74,7 @@ Only Part 1 mask metrics are currently available.
 - Main qualitative figure 2: `tennis_part1_vs_part2.png`
 - Real-scene success case: `wild_video1_part1_vs_part2.png`
 - Failure case: `wild_video2_part1_vs_part2.png`
+- Improved failure case: `wild_video2_part1_vs_sam2_part2.png`
 
 ## Asset checklist
 
@@ -82,13 +96,10 @@ Make sure the following are copied to a local machine before report writing and 
 
 1. Keep `bmx-trees` and `tennis` as the primary report results.
 2. Treat `wild_video1` as the real-video success case.
-3. Use `wild_video2` as the focused improvement target.
-4. Run one targeted mask-improvement experiment for `wild_video2`:
-   - `YOLO box -> SAM 2 video propagation` or manual prompt-guided masks
-   - keep `ProPainter` fixed
-   - compare old failure vs improved mask + ProPainter result
-5. Add one GT-backed quantitative experiment if time allows:
-   - preferred: a small DAVIS subset with `PSNR / SSIM`
+3. Present `wild_video2` as a failure-to-improvement case study.
+4. Add one more quantitative experiment if time allows:
+   - preferred: a small DAVIS subset for additional `JM / JR`
+   - optional: a synthetic masked-frame benchmark for `PSNR / SSIM`
 
 ## Current project narrative
 
@@ -97,5 +108,5 @@ The current story is already clear enough for a progress presentation:
 1. Build a fully reproducible classical baseline.
 2. Replace the classical inpainting backend with `ProPainter` while keeping masks fixed.
 3. Show that deep video inpainting clearly improves restoration quality.
-4. Analyze a failure caused by weak automatic masks.
-5. Motivate `SAM 2` or guided refinement as the next controlled improvement.
+4. Analyze a failure caused by weak automatic masks on `wild_video2`.
+5. Show that prompt-guided `SAM 2` refinement improves mask completeness and leads to a better final restoration on the same sequence.
