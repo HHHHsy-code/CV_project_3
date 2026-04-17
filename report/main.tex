@@ -19,6 +19,7 @@ We study video object removal and background restoration for dynamic scenes.
 Our current pipeline includes a classical baseline based on object segmentation, sparse optical flow, temporal median borrowing, and \texttt{cv2.inpaint}, followed by a stronger video inpainting backend using ProPainter.
 Rather than changing every component at once, we first keep the removal masks fixed and replace only the restoration stage, which gives a controlled comparison between classical and modern video completion methods.
 Our current results on \texttt{bmx-trees}, \texttt{tennis}, and two self-recorded wild videos show that ProPainter substantially improves visual quality over the baseline restoration module, while a prompt-guided SAM~2 refinement step further improves a real-scene failure case by strengthening the upstream masks.
+The project therefore provides three complementary contributions: a reproducible classical baseline, a controlled backend replacement experiment, and a targeted failure-to-improvement case study that isolates the role of mask quality.
 \textbf{GitHub Repository:} \url{https://github.com/HHHHsy-code/CV_project_3}
 \end{abstract}
 
@@ -73,6 +74,13 @@ The first two are provided course sequences with mask annotations for baseline e
 The latter two are self-recorded real-scene videos with a single walking person crossing a mostly fixed background.
 An optional DAVIS subset~\cite{perazzi2016davis} remains a useful next source for additional mask evaluation.
 If we need restoration metrics such as PSNR or SSIM, we must construct a synthetic masked-frame benchmark with known clean targets rather than relying on raw DAVIS object masks alone.
+
+\subsection{Implementation Details}
+All experiments were run on a remote GPU server with CUDA-enabled PyTorch environments.
+The Part~1 baseline was executed in our local project environment, while ProPainter and SAM~2 were installed in separate conda environments to avoid dependency conflicts.
+For the controlled Part~2 comparison, we used the masks already produced by the Part~1 pipeline and passed them directly to ProPainter.
+For the \texttt{wild\_video2} refinement experiment, we automatically selected a seed frame from the original Part~1 masks, converted the selected mask into a prompt box, propagated the object through the video with SAM~2, and then reran ProPainter with the refined mask directory.
+This staged setup was useful in practice because it let us diagnose whether failures came from poor restoration or from poor mask coverage.
 
 \subsection{Metrics}
 For mask quality, we report $J_M$ and $J_R$, which correspond to region similarity and recall-style mask coverage, together with mean precision for additional interpretation.
@@ -181,6 +189,17 @@ Additional failure modes include overly large masks on thin structures in \textt
 This analysis is important because it clarifies that not all object-removal failures originate from the inpainting network.
 In our pipeline, restoration quality depends on both a good completion model and sufficiently accurate masks.
 The \texttt{wild\_video2} case therefore acts as a useful diagnostic example: once the mask quality is improved while the restoration backend is held fixed, the final output improves as well.
+
+\section{Discussion and Limitations}
+The current project already supports a coherent experimental narrative, but it still has clear limitations.
+First, the strongest restoration evidence is qualitative because our wild-video data do not provide clean-background ground truth.
+Second, the Part~1 baseline remains sensitive to imperfect detections, especially in scenes with thin structures or large appearance changes.
+Third, our SAM~2 refinement experiment is intentionally targeted rather than fully generalized across all sequences.
+This is a reasonable design choice for a course project because it produces an interpretable failure analysis, but it does not yet constitute a universal mask-refinement module for every scene.
+
+Even with these limitations, the current system is already useful from an experimental standpoint.
+The controlled ProPainter comparison demonstrates that the restoration backend matters, while the \texttt{wild\_video2} case demonstrates that better masks can unlock additional gains when restoration is held fixed.
+Together, these experiments make the report stronger than a single baseline-only implementation and provide a clear roadmap for future extensions.
 
 \section{Conclusion}
 Our current experiments support two clear conclusions.
