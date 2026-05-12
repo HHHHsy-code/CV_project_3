@@ -157,7 +157,8 @@ def main() -> None:
         "prompt_box_xyxy": box,
         "saved_mask_count": len(saved_frames),
     }
-    with (output_dir / "sam2_summary.json").open("w", encoding="utf-8") as handle:
+    summary_path = output_dir.parent / f"{output_dir.name}_sam2_summary.json"
+    with summary_path.open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2, ensure_ascii=False)
 
     print(json.dumps(summary, indent=2, ensure_ascii=False))

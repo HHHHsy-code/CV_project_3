@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import List
 
 import numpy as np
@@ -114,6 +115,23 @@ def _text_row(text: str, width: int, height: int = 40) -> np.ndarray:
     return row
 
 
+def _frame_index_from_path(path: Path) -> int | None:
+    matches = re.findall(r"(\d+)", path.stem)
+    if not matches:
+        return None
+    return int(matches[-1])
+
+
+def _indexed_images(directory: str | Path) -> dict[int, Path]:
+    mapping: dict[int, Path] = {}
+    for path in list_images(directory):
+        frame_index = _frame_index_from_path(path)
+        if frame_index is None:
+            continue
+        mapping[frame_index] = path
+    return mapping
+
+
 def generate_method_comparison_grid(
     part1_dir: str | Path,
     part2_video: str | Path,
@@ -166,6 +184,69 @@ def generate_method_comparison_grid(
 
         comparison_row = np.concatenate([original, mask, part1, part2], axis=1)
         rows.append(np.concatenate([label, titles, comparison_row], axis=0))
+
+    grid = np.concatenate(rows, axis=0)
+    output = Path(output_path)
+    ensure_dir(output.parent)
+    cv2.imwrite(str(output), grid)
+    return output
+
+
+def generate_keyframe_comparison_grid(
+    original_dir: str | Path,
+    mask_dir: str | Path,
+    reference_dir: str | Path,
+    edited_dir: str | Path,
+    output_path: str | Path,
+    keyframes: List[int],
+    reference_title: str = "ProPainter",
+    edited_title: str = "AttentiveEraser",
+) -> Path:
+    cv2 = _require_cv2()
+    original_lookup = _indexed_images(original_dir)
+    mask_lookup = _indexed_images(mask_dir)
+    reference_lookup = _indexed_images(reference_dir)
+    edited_lookup = _indexed_images(edited_dir)
+
+    rows = []
+    for idx in keyframes:
+        try:
+            original_path = original_lookup[idx]
+            mask_path = mask_lookup[idx]
+            reference_path = reference_lookup[idx]
+            edited_path = edited_lookup[idx]
+        except KeyError as exc:
+            raise RuntimeError(f"Missing keyframe asset for frame {idx:05d}.") from exc
+
+        original = cv2.imread(str(original_path), cv2.IMREAD_COLOR)
+        mask = cv2.imread(str(mask_path), cv2.IMREAD_COLOR)
+        reference = cv2.imread(str(reference_path), cv2.IMREAD_COLOR)
+        edited = cv2.imread(str(edited_path), cv2.IMREAD_COLOR)
+        if original is None or mask is None or reference is None or edited is None:
+            raise RuntimeError(f"Failed to read a comparison image for frame {idx:05d}.")
+
+        mask = _resize_like(mask, original)
+        reference = _resize_like(reference, original)
+        edited = _resize_like(edited, original)
+
+        column_width = original.shape[1]
+        total_width = column_width * 4
+        label = _text_row(f"Frame {idx:03d}", total_width)
+        titles = np.full((40, total_width, 3), 255, dtype=np.uint8)
+        for column_idx, title in enumerate(["Original", "Mask", reference_title, edited_title]):
+            cv2.putText(
+                titles,
+                title,
+                (12 + column_idx * column_width, 28),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (20, 20, 20),
+                2,
+                cv2.LINE_AA,
+            )
+
+        row = np.concatenate([original, mask, reference, edited], axis=1)
+        rows.append(np.concatenate([label, titles, row], axis=0))
 
     grid = np.concatenate(rows, axis=0)
     output = Path(output_path)

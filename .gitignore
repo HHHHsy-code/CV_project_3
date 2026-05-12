@@ -8,6 +8,9 @@ __pycache__/
 .mypy_cache/
 .cache/
 .tmp_pdf_env/
+.omx/
+/Project3/
+/tmp/
 
 data/raw/*
 !data/raw/.gitkeep
@@ -23,3 +26,25 @@ metrics/*
 !metrics/.gitkeep
 
 report/build/
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.brf
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.pdf
+report/assets/generated/
+
+docs/*.aux
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.log
+docs/*.out
+docs/*.synctex.gz
+docs/*.xdv
+docs/presentation_outline_progress_*.pdf
+docs/presentation_script_progress_*.pdf
+
+outputs/presentation/

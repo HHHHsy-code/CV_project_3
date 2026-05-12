@@ -190,6 +190,232 @@ Recommended process:
 
 The concrete adapter commands are documented in `docs/pipeline_notes.md`.
 
+## Part 3 advanced-model workflow
+
+The final extension is intentionally focused on one failure case, `wild_video2`.
+
+We split Part 3 into two small, explainable branches instead of building a large experiment matrix:
+
+1. **Mask branch**: `Track-Anything + ProPainter`
+2. **Restoration branch**: `best current mask + AttentiveEraser` on a few hard keyframes
+
+The repository now includes helper commands for:
+
+- bootstrapping a prompt box from an existing mask
+- preparing a standard `Track-Anything` workspace
+- exporting failure-case keyframes for image-level diffusion editing
+- batch-running `AttentiveEraser` on those exported keyframes
+- generating comparison figures for the keyframe branch
+
+### Prepare the Track-Anything branch
+
+Generate a box prompt from an existing seed mask and create a standard workspace:
+
+```bash
+source .venv/bin/activate
+python3 scripts/project3.py part3-track-prepare \
+  --config configs/project3.yaml \
+  --video data/raw/wild_processed/wild_video2_480p24.mp4 \
+  --seed-mask-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --experiment wild_video2_track_anything \
+  --frame-index 113 \
+  --margin 24
+```
+
+This creates:
+
+```text
+outputs/part3/wild_video2_track_anything/
+  masks/
+  prompts/
+  propainter_output/
+  recommended_commands.json
+```
+
+The prompt JSON stores:
+
+- `frame_index`: zero-based frame index in the project code
+- `prompt_box_xyxy`: a suggested region of interest
+- `prompt_point_xy`: the center point of that region
+
+The official `Track-Anything` Gradio app is click-based rather than box-based, so in practice:
+
+- move the frame slider to `frame_index + 1`
+- use `prompt_point_xy` as the first positive click
+- add one or two more positive clicks inside `prompt_box_xyxy`
+- add a negative click if the mask spills into the background
+
+### Summarize the new masks
+
+If you start the official Gradio app, launch it with mask saving enabled:
+
+```bash
+python app.py --device cuda:0 --mask_save True
+```
+
+The upstream app stores tracked masks as `.npy` files under `result/mask/<video_stem>/`.
+Convert them into project-standard PNG masks with:
+
+```bash
+python3 scripts/project3.py part3-convert-track-masks \
+  --source-dir external/Track-Anything/result/mask/wild_video2_480p24 \
+  --output-dir outputs/part3/wild_video2_track_anything/masks
+```
+
+Then run:
+
+```bash
+python3 scripts/project3.py summarize-mask \
+  --pred outputs/part3/wild_video2_track_anything/masks \
+  --output metrics/wild_video2_track_anything_mask_summary.json
+```
+
+Compare that JSON against:
+
+- `metrics/wild_video2_part1_mask_summary.json`
+- `metrics/wild_video2_sam2_mask_summary.json`
+
+### Prepare the keyframe-level diffusion branch
+
+Create a failure-case workspace with a fixed set of keyframes:
+
+```bash
+python3 scripts/project3.py part3-prepare \
+  --experiment-dir outputs/part3 \
+  --name wild_video2_attentive_eraser \
+  --keyframes 75,113,151,189 \
+  --notes "Keyframe-level diffusion repair for wild_video2"
+```
+
+Export the original frame, the chosen mask, and the current best reference result (for example, `SAM 2 + ProPainter` or `Track-Anything + ProPainter`):
+
+```bash
+python3 scripts/project3.py part3-export-keyframes \
+  --video data/raw/wild_processed/wild_video2_480p24.mp4 \
+  --mask-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --reference-video outputs/part2/wild_video2_propainter_from_sam2/wild_video2_480p24/inpaint_out.mp4 \
+  --workspace outputs/part3/wild_video2_attentive_eraser
+```
+
+This writes:
+
+```text
+outputs/part3/wild_video2_attentive_eraser/
+  keyframes/
+  masks/
+  reference/
+  edited/
+  comparisons/
+```
+
+### Start with a lightweight image-level diffusion baseline
+
+Before downloading a large SDXL checkpoint, run a smaller image-level inpainting baseline first. The local script below uses a standard Diffusers inpainting pipeline and writes results into `edited_sd2/`.
+
+```bash
+python scripts/run_sd2_inpaint_keyframes.py \
+  --workspace outputs/part3/wild_video2_attentive_eraser \
+  --model-id stabilityai/stable-diffusion-2-inpainting \
+  --device cuda:0 \
+  --keyframes 75 \
+  --height 512 \
+  --width 512 \
+  --num-inference-steps 40 \
+  --guidance-scale 7.5 \
+  --seed 123
+```
+
+If the smoke test succeeds, run the full four-frame batch:
+
+```bash
+python scripts/run_sd2_inpaint_keyframes.py \
+  --workspace outputs/part3/wild_video2_attentive_eraser \
+  --model-id stabilityai/stable-diffusion-2-inpainting \
+  --device cuda:0 \
+  --height 512 \
+  --width 512 \
+  --num-inference-steps 40 \
+  --guidance-scale 7.5 \
+  --seed 123
+```
+
+This writes:
+
+```text
+outputs/part3/wild_video2_attentive_eraser/edited_sd2/
+  edited_00075.png
+  edited_00113.png
+  edited_00151.png
+  edited_00189.png
+```
+
+After that, generate a four-column comparison grid:
+
+```bash
+python3 scripts/project3.py compare-keyframes \
+  --original-dir outputs/part3/wild_video2_attentive_eraser/keyframes \
+  --mask-dir outputs/part3/wild_video2_attentive_eraser/masks \
+  --reference-dir outputs/part3/wild_video2_attentive_eraser/reference \
+  --edited-dir outputs/part3/wild_video2_attentive_eraser/edited_sd2 \
+  --keyframes 75,113,151,189 \
+  --reference-title ProPainter \
+  --edited-title SD2-Inpaint \
+  --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_sd2_inpaint_grid.png
+```
+
+Use this lightweight baseline to decide whether a heavier SDXL-based branch is worth the download and deployment cost.
+
+### Escalate to `AttentiveEraser` only if needed
+
+Run `AttentiveEraser` through the local wrapper script. It mirrors the upstream `main.py` preprocessing and loops over the exported keyframes:
+
+```bash
+python scripts/run_attentive_eraser_keyframes.py \
+  --workspace outputs/part3/wild_video2_attentive_eraser \
+  --repo-dir external/AttentiveEraser \
+  --model-id stabilityai/stable-diffusion-xl-base-1.0 \
+  --device cuda:0 \
+  --height 1024 \
+  --width 1024 \
+  --strength 0.8 \
+  --rm-guidance-scale 9 \
+  --ss-steps 9 \
+  --ss-scale 0.3 \
+  --aas-start-step 0 \
+  --aas-start-layer 34 \
+  --aas-end-layer 70 \
+  --num-inference-steps 50 \
+  --guidance-scale 1 \
+  --seed 123
+```
+
+For a smoke test, add `--keyframes 75` first and verify that `outputs/part3/wild_video2_attentive_eraser/edited/edited_00075.png` is produced before running the full batch.
+
+### Build the final keyframe comparison figure
+
+After the diffusion outputs are ready, generate a four-column comparison grid:
+
+```bash
+python3 scripts/project3.py compare-keyframes \
+  --original-dir outputs/part3/wild_video2_attentive_eraser/keyframes \
+  --mask-dir outputs/part3/wild_video2_attentive_eraser/masks \
+  --reference-dir outputs/part3/wild_video2_attentive_eraser/reference \
+  --edited-dir outputs/part3/wild_video2_attentive_eraser/edited \
+  --keyframes 75,113,151,189 \
+  --reference-title ProPainter \
+  --edited-title AttentiveEraser \
+  --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_diffusion_keyframes.png
+```
+
+## Official upstream references
+
+The current Part 3 recommendations are based on the official public repositories:
+
+- `Track-Anything`: [gaomingqi/Track-Anything](https://github.com/gaomingqi/Track-Anything)
+- `AttentiveEraser`: [Alibaba-YuFeng/AttentiveEraser](https://github.com/Alibaba-YuFeng/AttentiveEraser)
+
+These repos evolve independently. Treat the generated command templates as starting points and align them with the entrypoints in your local clones.
+
 ## Suggested experiments
 
 - `wild corridor`: fixed camera, pedestrians crossing the scene

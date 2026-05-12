@@ -50,7 +50,20 @@ part2:
     checkpoint_dir: ""
 
 part3:
+  keyframes:
+    - 75
+    - 113
+    - 151
+    - 189
+  track_anything:
+    repo_dir: "external/Track-Anything"
+    entrypoint: "app.py"
+  attentive_eraser:
+    repo_dir: "external/AttentiveEraser"
+    entrypoint: "main.py"
+  propainter:
+    repo_dir: "external/ProPainter"
   diffusion:
     enabled: false
-    tool: "manual"
-    notes: "Use keyframe-only inpainting for failure cases."
+    tool: "AttentiveEraser"
+    notes: "Use keyframe-only diffusion editing for failure cases."
