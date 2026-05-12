@@ -88,11 +88,11 @@ The current most informative failure case is \texttt{wild\_video2}, where the mo
 This means the original failure is not caused by the inpainting backend itself; the object is simply never marked for removal in several frames.
 We therefore introduce a targeted mask-improvement experiment based on prompt-guided SAM~2 propagation~\cite{ravi2024sam2}, and we use the resulting refined masks with the same ProPainter backend to measure whether better masks alone improve the final removal result.
 
-Our current Part~3 has two sub-branches.
-Part~3A uses a single prompt-guided SAM~2 propagation run to produce refined masks for \texttt{wild\_video2}, then reruns ProPainter with the improved masks.
-Part~3B is an ablation on temporal prompting: instead of a single prompt frame, we run SAM~2 from multiple non-empty seed frames and merge the propagated masks with either union or majority voting.
-This second branch is important because it tests a concrete tracking-inspired hypothesis: perhaps the remaining failure is caused by over-reliance on one prompt frame rather than by the propagation model itself.
-In parallel, we prepared a keyframe-level diffusion restoration branch for later comparison, but the current report focuses on the mask-side results because they are the branch that already produced complete and verifiable outputs.
+Our current Part~3 therefore has one main branch and two supplemental checks.
+The main branch uses a single prompt-guided SAM~2 propagation run to produce refined masks for \texttt{wild\_video2}, then reruns ProPainter with the improved masks.
+The first supplemental check is an ablation on temporal prompting: instead of a single prompt frame, we run SAM~2 from multiple non-empty seed frames and merge the propagated masks with either union or majority voting.
+This tests a concrete tracking-inspired hypothesis: perhaps the remaining failure is caused by over-reliance on one prompt frame rather than by the propagation model itself.
+The second supplemental check is a keyframe-level diffusion restoration baseline on four hard frames, which lets us ask whether a lightweight image-level generator clearly outperforms ProPainter once the mask is already reasonably good.
 
 \section{Experiments}
 \subsection{Datasets}
@@ -109,7 +109,8 @@ The Part~1 baseline was executed in our local project environment, while ProPain
 For the controlled Part~2 comparison, we used the masks already produced by the Part~1 pipeline and passed them directly to ProPainter.
 For the \texttt{wild\_video2} refinement experiment, we automatically selected a seed frame from the original Part~1 masks, converted the selected mask into a prompt box, propagated the object through the video with SAM~2, and then reran ProPainter with the refined mask directory.
 For the multi-prompt ablation, we repeated this procedure from three non-empty seed frames ($75$, $139$, and $152$) and merged the resulting binary mask directories with union and majority voting.
-For the diffusion branch, we prepared a keyframe-editing workspace on frames $75$, $113$, $151$, and $189$, but full SDXL-based results were not completed in time because the model weights were not yet mirrored into the offline server environment.
+For the diffusion branch, we prepared a keyframe-editing workspace on frames $75$, $113$, $151$, and $189$ and ran a lightweight SD2-based image inpainting baseline on those frames.
+We also prepared a heavier SDXL-based AttentiveEraser wrapper, but that heavier branch was not needed for the final project conclusion once the lighter baseline had already shown no clear advantage over ProPainter.
 This staged setup was useful in practice because it let us diagnose whether failures came from poor restoration or from poor mask coverage.
 
 \subsection{Metrics}
@@ -205,12 +206,14 @@ For \texttt{wild\_video2}, SAM~2 refinement increases temporal mask coverage fro
 At the same time, the mean mask area ratio drops from $0.0166$ to $0.0115$, indicating that the improved masks are not simply larger; instead, they are more temporally stable and spatially tighter around the walking person.
 However, the multi-prompt ablation shows that simple prompt ensembling does not further improve this sequence: both union and majority-vote fusion produce almost identical temporal coverage and area statistics.
 This negative result is useful because it narrows the interpretation of the remaining error: the main gain comes from moving from weak automatic masks to prompt-guided SAM~2 propagation, not from choosing more prompt frames and fusing them with a simple rule.
+Finally, the lightweight SD2 keyframe baseline is technically feasible and can remove the target cleanly on the chosen frames, but it does not provide a clear visual advantage over the ProPainter reference, so it remains a supplemental rather than a dominant result.
 
 \subsection{Qualitative Results}
 The strongest current qualitative comparisons come from \texttt{bmx-trees} and \texttt{tennis}.
 In both cases, keeping the masks fixed and replacing the restoration backend with ProPainter significantly reduces blocky artifacts, transparent ghosting, and inconsistent texture synthesis.
 \texttt{wild\_video1} serves as a real-scene success case.
 \texttt{wild\_video2} now serves as a failure-to-improvement case: the original Part~2 result shows that weak masks prevent complete removal, while the SAM~2-refined version covers the walking person more consistently and produces a visibly cleaner restoration.
+On the same failure case, the lightweight SD2 keyframe baseline produces acceptable single-frame removals, but it does not clearly surpass ProPainter in structure recovery or realism, so we do not treat it as the main extension path.
 
 \begin{figure}[t]
   \centering
@@ -271,8 +274,9 @@ First, the strongest restoration evidence is qualitative because our wild-video 
 Second, the Part~1 baseline remains sensitive to imperfect detections, especially in scenes with thin structures or large appearance changes.
 Third, our SAM~2 refinement experiment is intentionally targeted rather than fully generalized across all sequences.
 This is a reasonable design choice for a course project because it produces an interpretable failure analysis, but it does not yet constitute a universal mask-refinement module for every scene.
-Fourth, our diffusion-based restoration branch is not yet complete.
-We already prepared a standardized keyframe-editing workspace for \texttt{wild\_video2}, but the SDXL-based AttentiveEraser experiment requires large model weights and an accessible model mirror, so this report only includes the completed mask-side branch.
+Fourth, our heavy diffusion-based restoration branch is not complete.
+We did finish a lightweight SD2 keyframe baseline on \texttt{wild\_video2}, but the larger SDXL-based AttentiveEraser experiment still requires heavier model deployment.
+This distinction matters: the repo now contains completed exploratory diffusion evidence, but not a validated heavy diffusion branch that clearly surpasses ProPainter.
 
 Even with these limitations, the current system is already useful from an experimental standpoint.
 The controlled ProPainter comparison demonstrates that the restoration backend matters, while the \texttt{wild\_video2} case demonstrates that better masks can unlock additional gains when restoration is held fixed.
@@ -284,8 +288,9 @@ Our current experiments support two clear conclusions.
 First, when the removal mask is held fixed, ProPainter provides substantially better restoration quality than the classical temporal median plus \texttt{cv2.inpaint} baseline.
 Second, on a real-scene failure case, stronger prompt-guided mask propagation with SAM~2 further improves final object removal quality, confirming that mask quality remains a key bottleneck in the full pipeline.
 Third, a simple multi-prompt fusion strategy does not materially outperform the single-prompt SAM~2 result on \texttt{wild\_video2}, which suggests that the main benefit already comes from switching to a stronger propagation model rather than from prompt ensembling.
+Fourth, a lightweight SD2 keyframe baseline is feasible but does not clearly outperform ProPainter, so our final recommendation remains a video-level pipeline based on improved masks plus ProPainter rather than a diffusion-first replacement.
 Taken together, these results suggest that our project has already moved beyond a single baseline implementation: we now have a reproducible baseline, a controlled Part 1 versus Part 2 comparison, a targeted failure-to-improvement case study, and a small but meaningful ablation that clarifies the limits of our current refinement strategy.
-The most natural remaining extensions are to add either more mask-focused evaluation on an annotated subset, a synthetic benchmark for restoration metrics, or a completed diffusion-based keyframe restoration branch once the model deployment constraints are resolved.
+The most natural remaining extensions are to add either more mask-focused evaluation on an annotated subset, a synthetic benchmark for restoration metrics, or a heavier diffusion branch only if a future lightweight baseline demonstrates a more convincing advantage.
 
 \bibliographystyle{ieeenat_fullname}
 \bibliography{references}

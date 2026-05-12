@@ -193,89 +193,89 @@ The concrete adapter commands are documented in `docs/pipeline_notes.md`.
 ## Part 3 advanced-model workflow
 
 The final extension is intentionally focused on one failure case, `wild_video2`.
+The validated Part 3 results in the current repo are:
 
-We split Part 3 into two small, explainable branches instead of building a large experiment matrix:
+1. **Single-prompt SAM 2 refinement** on `wild_video2`, followed by `ProPainter`
+2. **Multi-prompt SAM 2 ablation** with union / majority fusion
+3. **Lightweight SD2 keyframe inpainting baseline** as a supplemental image-level check
 
-1. **Mask branch**: `Track-Anything + ProPainter`
-2. **Restoration branch**: `best current mask + AttentiveEraser` on a few hard keyframes
+This means the current final story is:
 
-The repository now includes helper commands for:
+- `SAM 2 + ProPainter` is the main improvement branch
+- multi-prompt fusion is a negative / limited-gain ablation
+- image-level diffusion is a supplemental experiment, not the main video pipeline
 
-- bootstrapping a prompt box from an existing mask
-- preparing a standard `Track-Anything` workspace
-- exporting failure-case keyframes for image-level diffusion editing
-- batch-running `AttentiveEraser` on those exported keyframes
-- generating comparison figures for the keyframe branch
+The repository also includes optional helper commands for `Track-Anything` and `AttentiveEraser`, but those heavier branches are not part of the final validated result set.
 
-### Prepare the Track-Anything branch
+### Main branch: single-prompt `SAM 2 + ProPainter`
 
-Generate a box prompt from an existing seed mask and create a standard workspace:
+Run the mask-refinement script on a non-empty Part 1 seed frame:
 
 ```bash
-source .venv/bin/activate
-python3 scripts/project3.py part3-track-prepare \
-  --config configs/project3.yaml \
+python scripts/sam2_refine_with_seed_mask.py \
   --video data/raw/wild_processed/wild_video2_480p24.mp4 \
-  --seed-mask-dir outputs/part2/wild_video2_sam2_refined_masks \
-  --experiment wild_video2_track_anything \
-  --frame-index 113 \
-  --margin 24
+  --seed-mask-dir outputs/part1/wild_video2_480p24_part1_gpu/masks \
+  --output-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --checkpoint external/sam2/checkpoints/sam2.1_hiera_small.pt \
+  --model-cfg configs/sam2.1/sam2.1_hiera_s.yaml \
+  --prompt-frame 75 \
+  --margin 24 \
+  --offload-video-to-cpu
 ```
 
-This creates:
-
-```text
-outputs/part3/wild_video2_track_anything/
-  masks/
-  prompts/
-  propainter_output/
-  recommended_commands.json
-```
-
-The prompt JSON stores:
-
-- `frame_index`: zero-based frame index in the project code
-- `prompt_box_xyxy`: a suggested region of interest
-- `prompt_point_xy`: the center point of that region
-
-The official `Track-Anything` Gradio app is click-based rather than box-based, so in practice:
-
-- move the frame slider to `frame_index + 1`
-- use `prompt_point_xy` as the first positive click
-- add one or two more positive clicks inside `prompt_box_xyxy`
-- add a negative click if the mask spills into the background
-
-### Summarize the new masks
-
-If you start the official Gradio app, launch it with mask saving enabled:
-
-```bash
-python app.py --device cuda:0 --mask_save True
-```
-
-The upstream app stores tracked masks as `.npy` files under `result/mask/<video_stem>/`.
-Convert them into project-standard PNG masks with:
-
-```bash
-python3 scripts/project3.py part3-convert-track-masks \
-  --source-dir external/Track-Anything/result/mask/wild_video2_480p24 \
-  --output-dir outputs/part3/wild_video2_track_anything/masks
-```
-
-Then run:
+Then summarize the refined masks:
 
 ```bash
 python3 scripts/project3.py summarize-mask \
-  --pred outputs/part3/wild_video2_track_anything/masks \
-  --output metrics/wild_video2_track_anything_mask_summary.json
+  --pred outputs/part2/wild_video2_sam2_refined_masks \
+  --output outputs/part2/wild_video2_sam2_refined_masks_sam2_summary.json
 ```
 
-Compare that JSON against:
+And rerun `ProPainter` with the refined masks:
 
-- `metrics/wild_video2_part1_mask_summary.json`
-- `metrics/wild_video2_sam2_mask_summary.json`
+```bash
+cd external/ProPainter
+python inference_propainter.py \
+  --video ../../data/raw/wild_processed/wild_video2_480p24.mp4 \
+  --mask ../../outputs/part2/wild_video2_sam2_refined_masks \
+  --output ../../outputs/part2/wild_video2_propainter_from_sam2 \
+  --fp16 \
+  --subvideo_length 80 \
+  --save_fps 24 \
+  --save_frames
+```
 
-### Prepare the keyframe-level diffusion branch
+Finally, build the comparison figure:
+
+```bash
+python3 scripts/project3.py compare-methods \
+  --part1-dir outputs/part1/wild_video2_480p24_part1_gpu \
+  --mask-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --part2-video outputs/part2/wild_video2_propainter_from_sam2/wild_video2_480p24/inpaint_out.mp4 \
+  --output outputs/comparisons/wild_video2_part1_vs_sam2_part2.png
+```
+
+### Ablation branch: multi-prompt `SAM 2`
+
+The current repo also supports a simple multi-seed ablation. In our final checked run, prompt frames `75`, `139`, and `152` were propagated independently and merged with:
+
+- `union`
+- `majority`
+
+The helper CLI is:
+
+```bash
+python3 scripts/project3.py merge-mask-dirs \
+  --mask-dir outputs/part3/wild_video2_sam2_seed075_masks \
+  --mask-dir outputs/part3/wild_video2_sam2_seed139_masks \
+  --mask-dir outputs/part3/wild_video2_sam2_seed152_masks \
+  --output-dir outputs/part3/wild_video2_sam2_multi_majority_masks \
+  --mode majority
+```
+
+In the checked final result, this branch did **not** materially improve over the single-prompt SAM 2 masks. Keep it as an ablation rather than the main result.
+
+### Supplemental branch: lightweight SD2 keyframe inpainting
 
 Create a failure-case workspace with a fixed set of keyframes:
 
@@ -287,7 +287,7 @@ python3 scripts/project3.py part3-prepare \
   --notes "Keyframe-level diffusion repair for wild_video2"
 ```
 
-Export the original frame, the chosen mask, and the current best reference result (for example, `SAM 2 + ProPainter` or `Track-Anything + ProPainter`):
+Export the original frame, the chosen mask, and the current best reference result:
 
 ```bash
 python3 scripts/project3.py part3-export-keyframes \
@@ -297,35 +297,7 @@ python3 scripts/project3.py part3-export-keyframes \
   --workspace outputs/part3/wild_video2_attentive_eraser
 ```
 
-This writes:
-
-```text
-outputs/part3/wild_video2_attentive_eraser/
-  keyframes/
-  masks/
-  reference/
-  edited/
-  comparisons/
-```
-
-### Start with a lightweight image-level diffusion baseline
-
-Before downloading a large SDXL checkpoint, run a smaller image-level inpainting baseline first. The local script below uses a standard Diffusers inpainting pipeline and writes results into `edited_sd2/`.
-
-```bash
-python scripts/run_sd2_inpaint_keyframes.py \
-  --workspace outputs/part3/wild_video2_attentive_eraser \
-  --model-id stabilityai/stable-diffusion-2-inpainting \
-  --device cuda:0 \
-  --keyframes 75 \
-  --height 512 \
-  --width 512 \
-  --num-inference-steps 40 \
-  --guidance-scale 7.5 \
-  --seed 123
-```
-
-If the smoke test succeeds, run the full four-frame batch:
+Run the lightweight image-level baseline:
 
 ```bash
 python scripts/run_sd2_inpaint_keyframes.py \
@@ -339,17 +311,7 @@ python scripts/run_sd2_inpaint_keyframes.py \
   --seed 123
 ```
 
-This writes:
-
-```text
-outputs/part3/wild_video2_attentive_eraser/edited_sd2/
-  edited_00075.png
-  edited_00113.png
-  edited_00151.png
-  edited_00189.png
-```
-
-After that, generate a four-column comparison grid:
+Generate the comparison grid:
 
 ```bash
 python3 scripts/project3.py compare-keyframes \
@@ -363,9 +325,11 @@ python3 scripts/project3.py compare-keyframes \
   --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_sd2_inpaint_grid.png
 ```
 
-Use this lightweight baseline to decide whether a heavier SDXL-based branch is worth the download and deployment cost.
+In the current checked result, the SD2 baseline works, but it does **not** clearly outperform `ProPainter`. It is therefore best treated as a supplemental experiment rather than a main pipeline replacement.
 
-### Escalate to `AttentiveEraser` only if needed
+### Optional heavy branch: `AttentiveEraser`
+
+Only if you explicitly want to continue beyond the validated final result, the repo also includes an `AttentiveEraser` wrapper. This is an optional extension, not part of the current final conclusion.
 
 Run `AttentiveEraser` through the local wrapper script. It mirrors the upstream `main.py` preprocessing and loops over the exported keyframes:
 
@@ -391,30 +355,14 @@ python scripts/run_attentive_eraser_keyframes.py \
 
 For a smoke test, add `--keyframes 75` first and verify that `outputs/part3/wild_video2_attentive_eraser/edited/edited_00075.png` is produced before running the full batch.
 
-### Build the final keyframe comparison figure
-
-After the diffusion outputs are ready, generate a four-column comparison grid:
-
-```bash
-python3 scripts/project3.py compare-keyframes \
-  --original-dir outputs/part3/wild_video2_attentive_eraser/keyframes \
-  --mask-dir outputs/part3/wild_video2_attentive_eraser/masks \
-  --reference-dir outputs/part3/wild_video2_attentive_eraser/reference \
-  --edited-dir outputs/part3/wild_video2_attentive_eraser/edited \
-  --keyframes 75,113,151,189 \
-  --reference-title ProPainter \
-  --edited-title AttentiveEraser \
-  --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_diffusion_keyframes.png
-```
-
 ## Official upstream references
 
 The current Part 3 recommendations are based on the official public repositories:
 
-- `Track-Anything`: [gaomingqi/Track-Anything](https://github.com/gaomingqi/Track-Anything)
+- `SAM 2`: [facebookresearch/sam2](https://github.com/facebookresearch/sam2)
 - `AttentiveEraser`: [Alibaba-YuFeng/AttentiveEraser](https://github.com/Alibaba-YuFeng/AttentiveEraser)
 
-These repos evolve independently. Treat the generated command templates as starting points and align them with the entrypoints in your local clones.
+`Track-Anything` support remains in the codebase as an optional future branch, but it is not part of the current final validated result path.
 
 ## Suggested experiments
 

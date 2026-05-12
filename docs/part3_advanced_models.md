@@ -1,91 +1,59 @@
-# Part 3 Advanced Models on `wild_video2`
+# Part 3 Final Status on `wild_video2`
 
-This note turns the instructor feedback into two focused experiments on a single failure case:
+This note records what was actually completed for the final `Part 3` branch, rather than listing every possible extension.
 
-1. `Track-Anything + ProPainter` for better temporal masks
-2. `AttentiveEraser` on four failure keyframes for stronger image-level restoration
+The checked final state is:
 
-The scope stays narrow on purpose. The goal is not to benchmark many models; the goal is to show whether more advanced tracking-aware masking and diffusion-based removal improve the same difficult sequence.
+1. `SAM 2 + ProPainter` is the main improvement branch on `wild_video2`
+2. multi-prompt `SAM 2` fusion was tested as an ablation and produced little extra gain
+3. a lightweight image-level `SD2-Inpaint` baseline was run on four keyframes as a supplemental restoration check
+4. the heavier `AttentiveEraser + SDXL` branch remains optional and was not needed for the final conclusion
 
-## Why this Part 3 is structured this way
+## Why Part 3 ended up this way
 
-The current evidence already supports two conclusions:
+The current evidence supports three stable conclusions:
 
-- `ProPainter` is stronger than the classical Part 1 restoration backend when the masks are fixed.
-- `wild_video2` fails mainly because the person is not covered consistently across frames.
+- `ProPainter` is stronger than the classical Part 1 restoration backend when masks are fixed
+- `wild_video2` fails mainly because the moving person is not covered consistently across frames
+- once the mask quality is improved with `SAM 2`, the final restored video becomes visibly cleaner
 
-That means the next useful questions are:
+That means the most useful final Part 3 questions are:
 
-- Can a tracking-aware mask model improve temporal coverage beyond the current `SAM 2` branch?
-- If the mask is already reasonably good, can a stronger diffusion remover improve the hardest keyframes?
+- does stronger mask propagation improve the same failure case?
+- does prompt ensembling add more benefit after the first `SAM 2` gain?
+- if `ProPainter` is already strong, does a lightweight image-level diffusion baseline clearly beat it on the hardest frames?
 
-## Branch A: `Track-Anything + ProPainter`
+## Branch A: single-prompt `SAM 2 + ProPainter`
 
-### 1. Prepare the experiment
+### 1. Run `SAM 2` refinement from a non-empty seed frame
 
 ```bash
 cd /data2/zguo315/CV_project_3/CV_project_3
-source .venv-cu128/bin/activate
+conda activate /data2/zguo315/conda_envs/sam2
 
-python3 scripts/project3.py part3-track-prepare \
-  --config configs/project3.yaml \
+python scripts/sam2_refine_with_seed_mask.py \
   --video data/raw/wild_processed/wild_video2_480p24.mp4 \
-  --seed-mask-dir outputs/part2/wild_video2_sam2_refined_masks \
-  --experiment wild_video2_track_anything \
-  --frame-index 113 \
-  --margin 24
+  --seed-mask-dir outputs/part1/wild_video2_480p24_part1_gpu/masks \
+  --output-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --checkpoint external/sam2/checkpoints/sam2.1_hiera_small.pt \
+  --model-cfg configs/sam2.1/sam2.1_hiera_s.yaml \
+  --prompt-frame 75 \
+  --margin 24 \
+  --offload-video-to-cpu
 ```
 
-This command:
-
-- creates `outputs/part3/wild_video2_track_anything/`
-- extracts a `prompt_box_xyxy` from the chosen seed mask
-- stores that prompt in `prompts/prompt_00113.json`
-- writes command templates into `recommended_commands.json`
-
-### 2. Run `Track-Anything` externally
-
-Follow the official repository:
-
-- [Track-Anything GitHub](https://github.com/gaomingqi/Track-Anything)
-
-The official repo ships an interactive Gradio app (`app.py`). The UI is click-based, not box-based, so use the generated prompt JSON as a guide:
-
-- prompt frame: `113` in zero-based indexing, so move the UI slider to `114`
-- first positive click: `prompt_point_xy`
-- additional positive clicks: inside `prompt_box_xyxy`
-- negative click: only if the mask bleeds into the background
-
-Start the app with mask saving enabled:
-
-```bash
-python app.py --device cuda:0 --mask_save True
-```
-
-The upstream app stores tracked masks as `.npy` files under:
-
-```text
-external/Track-Anything/result/mask/<video_stem>/
-```
-
-Convert those masks into project-standard PNG files with:
+### 2. Summarize the refined masks
 
 ```bash
 cd /data2/zguo315/CV_project_3/CV_project_3
 source .venv-cu128/bin/activate
 
-python3 scripts/project3.py part3-convert-track-masks \
-  --source-dir external/Track-Anything/result/mask/wild_video2_480p24 \
-  --output-dir outputs/part3/wild_video2_track_anything/masks
+python3 scripts/project3.py summarize-mask \
+  --pred outputs/part2/wild_video2_sam2_refined_masks \
+  --output outputs/part2/wild_video2_sam2_refined_masks_sam2_summary.json
 ```
 
-The converted masks will land in:
-
-```text
-outputs/part3/wild_video2_track_anything/masks/
-```
-
-### 3. Run `ProPainter`
+### 3. Rerun `ProPainter`
 
 ```bash
 cd /data2/zguo315/CV_project_3/CV_project_3/external/ProPainter
@@ -93,51 +61,76 @@ conda activate /data2/zguo315/conda_envs/propainter
 
 CUDA_VISIBLE_DEVICES=0 python inference_propainter.py \
   --video ../../data/raw/wild_processed/wild_video2_480p24.mp4 \
-  --mask ../../outputs/part3/wild_video2_track_anything/masks \
-  --output ../../outputs/part3/wild_video2_track_anything/propainter_output \
+  --mask ../../outputs/part2/wild_video2_sam2_refined_masks \
+  --output ../../outputs/part2/wild_video2_propainter_from_sam2 \
   --fp16 \
   --subvideo_length 80 \
   --save_fps 24 \
   --save_frames
 ```
 
-### 4. Evaluate the mask quality
+### 4. Build the comparison figure
 
 ```bash
 cd /data2/zguo315/CV_project_3/CV_project_3
 source .venv-cu128/bin/activate
 
-python3 scripts/project3.py summarize-mask \
-  --pred outputs/part3/wild_video2_track_anything/masks \
-  --output metrics/wild_video2_track_anything_mask_summary.json
-```
-
-Compare against:
-
-- `metrics/wild_video2_part1_mask_summary.json`
-- `metrics/wild_video2_sam2_mask_summary.json`
-
-Default acceptance target:
-
-- `temporal_coverage >= 0.642` or at least no worse than the `SAM 2` result
-- keyframes `75`, `113`, `151`, `189` all cover the walking person
-- `Track-Anything + ProPainter` is at least not worse than `SAM 2 + ProPainter`
-
-### 5. Build the final comparison figure
-
-You can reuse the existing Part 1 vs advanced-method figure builder:
-
-```bash
 python3 scripts/project3.py compare-methods \
   --part1-dir outputs/part1/wild_video2_480p24_part1_gpu \
-  --mask-dir outputs/part3/wild_video2_track_anything/masks \
-  --part2-video outputs/part3/wild_video2_track_anything/propainter_output/wild_video2_480p24/inpaint_out.mp4 \
-  --output outputs/part3/wild_video2_track_anything/comparisons/wild_video2_part1_vs_track_anything_part2.png
+  --mask-dir outputs/part2/wild_video2_sam2_refined_masks \
+  --part2-video outputs/part2/wild_video2_propainter_from_sam2/wild_video2_480p24/inpaint_out.mp4 \
+  --output outputs/comparisons/wild_video2_part1_vs_sam2_part2.png
 ```
 
-## Branch B: `AttentiveEraser` on failure keyframes
+This branch is the main final `Part 3` result.
 
-### 1. Prepare the failure-case workspace
+## Branch B: multi-prompt `SAM 2` ablation
+
+We also tested a simple prompt-ensemble hypothesis: maybe the remaining failure is caused by relying on only one seed frame.
+
+In the checked final run, three non-empty seeds were used:
+
+- `75`
+- `139`
+- `152`
+
+The propagated masks were merged with:
+
+- `union`
+- `majority`
+
+Example merge command:
+
+```bash
+python3 scripts/project3.py merge-mask-dirs \
+  --mask-dir outputs/part3/wild_video2_sam2_seed075_masks \
+  --mask-dir outputs/part3/wild_video2_sam2_seed139_masks \
+  --mask-dir outputs/part3/wild_video2_sam2_seed152_masks \
+  --output-dir outputs/part3/wild_video2_sam2_multi_majority_masks \
+  --mode majority
+```
+
+Then summarize:
+
+```bash
+python3 scripts/project3.py summarize-mask \
+  --pred outputs/part3/wild_video2_sam2_multi_majority_masks \
+  --output metrics/wild_video2_sam2_multi_majority_summary.json
+```
+
+Final checked conclusion:
+
+- `union` and `majority` both kept `122` non-empty frames
+- temporal coverage stayed at `0.642`
+- mean mask area changed only marginally
+
+So this branch is best reported as a **negative or limited-gain ablation**, not as a new main result.
+
+## Branch C: lightweight `SD2-Inpaint` keyframe baseline
+
+This branch is supplemental. It is not a video-level replacement pipeline.
+
+### 1. Prepare the keyframe workspace
 
 ```bash
 cd /data2/zguo315/CV_project_3/CV_project_3
@@ -150,9 +143,7 @@ python3 scripts/project3.py part3-prepare \
   --notes "Keyframe-level diffusion repair for wild_video2"
 ```
 
-### 2. Export the keyframes
-
-Use the best currently available mask branch as input. If `Track-Anything` is better than `SAM 2`, switch the `--mask-dir` and `--reference-video` below.
+### 2. Export frames, masks, and reference results
 
 ```bash
 python3 scripts/project3.py part3-export-keyframes \
@@ -162,32 +153,7 @@ python3 scripts/project3.py part3-export-keyframes \
   --workspace outputs/part3/wild_video2_attentive_eraser
 ```
 
-This writes:
-
-- original frames into `keyframes/`
-- masks into `masks/`
-- current best reference frames into `reference/`
-
-### 3. Start with a lightweight diffusion baseline
-
-Before downloading a large SDXL checkpoint, first test whether a smaller image-level inpainting model is already competitive on the four keyframes.
-
-Smoke test on frame `75`:
-
-```bash
-python scripts/run_sd2_inpaint_keyframes.py \
-  --workspace outputs/part3/wild_video2_attentive_eraser \
-  --model-id stabilityai/stable-diffusion-2-inpainting \
-  --device cuda:0 \
-  --keyframes 75 \
-  --height 512 \
-  --width 512 \
-  --num-inference-steps 40 \
-  --guidance-scale 7.5 \
-  --seed 123
-```
-
-Then run the full four-frame batch:
+### 3. Run the lightweight image-level baseline
 
 ```bash
 python scripts/run_sd2_inpaint_keyframes.py \
@@ -201,17 +167,7 @@ python scripts/run_sd2_inpaint_keyframes.py \
   --seed 123
 ```
 
-The script writes:
-
-```text
-outputs/part3/wild_video2_attentive_eraser/edited_sd2/
-  edited_00075.png
-  edited_00113.png
-  edited_00151.png
-  edited_00189.png
-```
-
-Generate the comparison grid:
+### 4. Build the 4-column comparison grid
 
 ```bash
 python3 scripts/project3.py compare-keyframes \
@@ -225,100 +181,30 @@ python3 scripts/project3.py compare-keyframes \
   --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_sd2_inpaint_grid.png
 ```
 
-If this lightweight branch already fails clearly on most frames, do not continue to the larger SDXL-based branch.
+Final checked conclusion:
 
-### 4. Run `AttentiveEraser` only if the lightweight baseline looks promising
+- `SD2-Inpaint` works on the four keyframes
+- it removes the walking person cleanly
+- but it does **not** clearly outperform `ProPainter`
 
-Follow the official repository:
+So this branch should be reported as a **supplemental exploratory result**, not as a replacement for the main video pipeline.
 
-- [AttentiveEraser GitHub](https://github.com/Alibaba-YuFeng/AttentiveEraser)
+## Optional heavy branch: `AttentiveEraser + SDXL`
 
-The official README positions `AttentiveEraser` as image-level object removal on top of pre-trained diffusion models and shows `main.py` as the entrypoint. In this repo, use the local wrapper so you can process the exported keyframes without patching the upstream example file.
+The repo includes a wrapper script for a heavier image-level branch:
 
-Smoke test on the first frame:
+- `scripts/run_attentive_eraser_keyframes.py`
 
-```bash
-python scripts/run_attentive_eraser_keyframes.py \
-  --workspace outputs/part3/wild_video2_attentive_eraser \
-  --repo-dir external/AttentiveEraser \
-  --model-id stabilityai/stable-diffusion-xl-base-1.0 \
-  --device cuda:0 \
-  --keyframes 75 \
-  --height 1024 \
-  --width 1024 \
-  --strength 0.8 \
-  --rm-guidance-scale 9 \
-  --ss-steps 9 \
-  --ss-scale 0.3 \
-  --aas-start-step 0 \
-  --aas-start-layer 34 \
-  --aas-end-layer 70 \
-  --num-inference-steps 50 \
-  --guidance-scale 1 \
-  --seed 123
-```
+This branch is intentionally left optional.
+It was not required for the final checked project state because the lighter `SD2` baseline already showed that diffusion was not clearly beating `ProPainter` on the selected keyframes.
 
-Then run the full four-frame batch:
+## Final Part 3 story to keep consistent everywhere
 
-```bash
-python scripts/run_attentive_eraser_keyframes.py \
-  --workspace outputs/part3/wild_video2_attentive_eraser \
-  --repo-dir external/AttentiveEraser \
-  --model-id stabilityai/stable-diffusion-xl-base-1.0 \
-  --device cuda:0 \
-  --height 1024 \
-  --width 1024 \
-  --strength 0.8 \
-  --rm-guidance-scale 9 \
-  --ss-steps 9 \
-  --ss-scale 0.3 \
-  --aas-start-step 0 \
-  --aas-start-layer 34 \
-  --aas-end-layer 70 \
-  --num-inference-steps 50 \
-  --guidance-scale 1 \
-  --seed 123
-```
+Use this wording consistently in the report, README, and presentation:
 
-The wrapper writes:
+1. `wild_video2` reveals that mask quality, not just restoration quality, is a key bottleneck
+2. prompt-guided `SAM 2` refinement improves the final result when `ProPainter` is held fixed
+3. multi-prompt `SAM 2` fusion does not materially improve over the single-prompt branch
+4. lightweight diffusion inpainting is feasible on the hard keyframes, but it does not clearly outperform `ProPainter`
 
-```text
-outputs/part3/wild_video2_attentive_eraser/edited/
-  edited_00075.png
-  edited_00113.png
-  edited_00151.png
-  edited_00189.png
-```
-
-### 5. Generate the 4-column keyframe grid
-
-```bash
-python3 scripts/project3.py compare-keyframes \
-  --original-dir outputs/part3/wild_video2_attentive_eraser/keyframes \
-  --mask-dir outputs/part3/wild_video2_attentive_eraser/masks \
-  --reference-dir outputs/part3/wild_video2_attentive_eraser/reference \
-  --edited-dir outputs/part3/wild_video2_attentive_eraser/edited \
-  --keyframes 75,113,151,189 \
-  --reference-title ProPainter \
-  --edited-title AttentiveEraser \
-  --output outputs/part3/wild_video2_attentive_eraser/comparisons/wild_video2_attentive_eraser_grid.png
-```
-
-Default acceptance target:
-
-- at least 3 out of 4 keyframes are visibly better than the `ProPainter` reference
-- no major structure drift around the building, pavement, or fountain boundaries
-
-If the diffusion outputs are sharper but inconsistent or structurally unstable, report the result as:
-
-> a keyframe-level upper bound on restoration quality, not as a full-video replacement
-
-## How to write the final Part 3 story
-
-Keep the narrative tight:
-
-1. Part 2 already showed that `ProPainter` helps when masks are fixed.
-2. Part 3A tests whether a stronger tracking-aware mask model improves the same failure case.
-3. Part 3B tests whether a stronger diffusion model improves the hardest keyframes once the mask is available.
-
-Do not expand beyond `wild_video2` unless time remains after these two branches are complete and verified.
+That is the checked final state of the current repository.
