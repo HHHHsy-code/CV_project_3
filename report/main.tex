@@ -13,31 +13,39 @@
 \usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
 
 \title{Video Object Removal and Inpainting for AIAA 3201 Project 3}
-\author{Shuyu HE \and Ziyi Guo}
+\author{Shuyu HE \and Ziyi GUO}
 \date{}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We study video object removal and background restoration for dynamic scenes.
-Our current pipeline includes a classical baseline based on object segmentation, sparse optical flow, temporal median borrowing, and \texttt{cv2.inpaint}, followed by a stronger video inpainting backend using ProPainter.
-Rather than changing every component at once, we first keep the removal masks fixed and replace only the restoration stage, which gives a controlled comparison between classical and modern video completion methods.
-Our current results on \texttt{bmx-trees}, \texttt{tennis}, and two self-recorded wild videos show that ProPainter substantially improves visual quality over the baseline restoration module, while a prompt-guided SAM~2 refinement step further improves a real-scene failure case by strengthening the upstream masks.
-We also tested a multi-prompt SAM~2 fusion variant on \texttt{wild\_video2}; the result was informative but did not materially improve temporal coverage beyond the single-prompt SAM~2 result.
-The project therefore provides four complementary outcomes: a reproducible classical baseline, a controlled backend replacement experiment, a targeted failure-to-improvement case study that isolates the role of mask quality, and a small ablation showing that simple prompt ensembling is not sufficient to further improve this sequence.
+We study video object removal and background restoration in dynamic scenes through a staged comparison between a transparent classical baseline and stronger modern components.
+Our pipeline starts from object segmentation, sparse optical flow, temporal median borrowing, and \texttt{cv2.inpaint}, then replaces only the restoration backend with ProPainter to isolate the effect of the inpainting model under fixed masks.
+On \texttt{bmx-trees}, \texttt{tennis}, and two self-recorded wild videos, this controlled replacement substantially improves qualitative restoration.
+We then analyze a real failure case, \texttt{wild\_video2}, where incomplete masks rather than weak restoration are the dominant bottleneck.
+A prompt-guided SAM~2 refinement stage improves this sequence by strengthening temporal mask coverage while keeping ProPainter fixed.
+We further test two follow-up variants: multi-prompt SAM~2 fusion and a lightweight SD2 keyframe inpainting baseline.
+The first produces little additional gain over single-prompt SAM~2, and the second is feasible but does not clearly outperform ProPainter.
+The resulting project offers a reproducible baseline, a controlled backend comparison, a targeted failure-to-improvement study, and two supplemental experiments that clarify which extensions are actually useful.
 \textbf{GitHub Repository:} \url{https://github.com/HHHHsy-code/CV_project_3}
 \end{abstract}
 
 \section{Introduction}
-Video object removal aims to erase dynamic foreground objects while recovering a temporally consistent background.
-This task is useful for scene cleanup, editing, robotics, and video understanding.
-In this project, we compare a controllable classical baseline with a modern AI-driven pipeline, then analyze failure cases caused by weak automatic masks.
-Our near-term goal is not only to produce a working system, but also to build a clear experimental story with interpretable ablations.
-To do this, we deliberately separate the two main sources of performance gain: mask quality and restoration quality.
-We first keep the removal region fixed and replace only the restoration backend, which gives a controlled comparison between classical completion and a stronger video inpainting model.
-We then focus on one real-scene failure case and improve only the masks with prompt-guided SAM~2, allowing us to study whether better masks alone improve the final result.
-Finally, we test whether a slightly more tracking-aware variant that fuses several SAM~2 propagation runs can further stabilize the difficult case.
+Video object removal aims to erase dynamic foreground objects while reconstructing a visually plausible and temporally coherent background.
+This capability is relevant to scene cleanup, video editing, robotics, and downstream perception.
+In practice, however, overall quality depends on at least two coupled components: accurate object masks and a strong restoration backend.
+This project is therefore organized around controlled substitutions rather than a single monolithic system comparison.
+
+We begin with a classical baseline that is easy to inspect stage by stage.
+We then keep the removal masks fixed and replace only the restoration module with ProPainter, which yields a cleaner comparison between classical completion and modern video inpainting.
+After that, we concentrate on one informative real-scene failure case and improve only the masks with prompt-guided SAM~2 propagation.
+This lets us ask a sharper question: if the inpainting backend is held fixed, does better temporal masking alone explain the improvement?
+Finally, we examine two follow-up extensions, namely multi-prompt SAM~2 fusion and a lightweight image-level diffusion baseline, to determine whether they add meaningful benefit beyond the main refinement branch.
+Our contributions are therefore empirical and diagnostic rather than algorithmic.
+First, we build a transparent baseline and a controlled Part~1-versus-Part~2 comparison that isolates the value of a stronger restoration backend.
+Second, we turn \texttt{wild\_video2} into a failure-to-improvement case study and show that prompt-guided SAM~2 mask propagation resolves the main bottleneck while keeping the restoration model fixed.
+Third, we report two honest supplemental results---multi-prompt SAM~2 fusion and SD2 keyframe inpainting---that clarify which extensions do \emph{not} deliver meaningful additional gains in our current setting.
 
 \section{Related Work}
 Modern video object removal depends on several subproblems: detecting the target object, segmenting it accurately, propagating masks across time, and restoring the hidden background.
@@ -113,6 +121,24 @@ For the diffusion branch, we prepared a keyframe-editing workspace on frames $75
 We also prepared a heavier SDXL-based AttentiveEraser wrapper, but that heavier branch was not needed for the final project conclusion once the lighter baseline had already shown no clear advantage over ProPainter.
 This staged setup was useful in practice because it let us diagnose whether failures came from poor restoration or from poor mask coverage.
 
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}p{0.12\linewidth}p{0.23\linewidth}p{0.21\linewidth}p{0.31\linewidth}@{}}
+    \toprule
+    Stage & Mask source & Restoration & Experimental role \\
+    \midrule
+    Part 1 & YOLOv8-seg + motion filtering & Median + OpenCV inpainting & Transparent classical baseline \\
+    Part 2 & Part 1 masks & ProPainter & Controlled backend replacement \\
+    Part 3A & Single-prompt SAM~2 & ProPainter & Main failure-case refinement on \texttt{wild\_video2} \\
+    Part 3B & Multi-prompt SAM~2 / SD2 keyframes & ProPainter / SD2 & Supplemental ablation and exploratory baseline \\
+    \bottomrule
+  \end{tabular}
+  \caption{Compact summary of the experimental branches. The table makes the controlled substitutions explicit: Part~2 changes the restoration backend, while Part~3 primarily changes mask quality.}
+  \label{tab:experiment-branches}
+\end{table}
+
 \subsection{Metrics}
 For mask quality, we report $J_M$ and $J_R$, which correspond to region similarity and recall-style mask coverage, together with mean precision for additional interpretation.
 Concretely, if $M_t$ is the predicted mask and $G_t$ is the ground-truth mask on frame $t$, then the region similarity is the standard Jaccard index
@@ -134,67 +160,22 @@ which measures the mean normalized mask area on frames of size $H \times W$.
 These statistics do not replace GT-backed metrics, but they help quantify whether a refinement is more persistent over time or merely produces larger masks.
 
 \subsection{Quantitative Results}
-Table~1 reports the current Part 1 mask quality results.
+Figure~\ref{fig:benchmark-mask-metrics} reports the current Part 1 mask quality results.
 The two provided benchmark sequences exhibit different failure modes.
 On \texttt{bmx-trees}, the baseline achieves high recall but low precision, which matches the visual observation that the masks are often too large and include extra background regions.
 On \texttt{tennis}, the masks are much tighter, yielding a considerably stronger baseline for the later restoration comparison.
 This difference in baseline mask quality is useful for interpretation: when ProPainter improves both sequences despite very different mask precision, the gain is more plausibly attributed to the restoration backend than to a trivial change in mask shape alone.
 
-\begin{table}[t]
+\begin{figure}[t]
   \centering
-  \caption{Current Part 1 mask quality results.}
-  \begin{tabular}{lccc}
-    \toprule
-    Sequence & $J_M$ & $J_R$ & Precision \\
-    \midrule
-    \texttt{bmx-trees} & 0.225 & 0.739 & 0.232 \\
-    \texttt{tennis} & 0.517 & 0.591 & 0.796 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{table}[t]
-  \centering
-  \caption{Current restoration evaluation status.}
-  \begin{tabular}{lcc}
-    \toprule
-    Setting & PSNR & SSIM \\
-    \midrule
-    Part 1 baseline & pending & pending \\
-    Part 2 with ProPainter & pending & pending \\
-    Synthetic benchmark extension & planned & planned \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{table}[t]
-  \centering
-  \caption{Lightweight mask-summary comparison on \texttt{wild\_video2}.}
-  \begin{tabular}{lcc}
-    \toprule
-    Setting & Coverage & Mean area \\
-    \midrule
-    Part 1 mask & 0.547 & 0.0166 \\
-    SAM~2 refined mask & 0.642 & 0.0115 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{table}[t]
-  \centering
-  \caption{Ablation on \texttt{wild\_video2}: single-prompt vs.\ multi-prompt SAM~2 masks.}
-  \small
-  \begin{tabular}{lccc}
-    \toprule
-    Setting & Non-empty & Coverage & Mean area \\
-    \midrule
-    Part 1 mask & 104 & 0.547 & 0.0166 \\
-    SAM~2 single & 122 & 0.642 & 0.0115 \\
-    SAM~2 union & 122 & 0.642 & 0.0116 \\
-    SAM~2 majority & 122 & 0.642 & 0.0115 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+  \IfFileExists{assets/benchmark_mask_metrics.png}{
+    \includegraphics[width=\linewidth]{assets/benchmark_mask_metrics.png}
+  }{
+    \fbox{\rule{0pt}{1.5in}\rule{0.95\linewidth}{0pt}}
+  }
+  \caption{Benchmark mask quality on the two annotated course sequences. The contrast is informative: \texttt{bmx-trees} shows high recall but poor precision, while \texttt{tennis} is much more balanced and precise.}
+  \label{fig:benchmark-mask-metrics}
+\end{figure}
 
 At the current project stage, the restoration story is best supported by controlled qualitative comparison rather than PSNR or SSIM.
 Specifically, we keep the removal masks fixed and compare the classical temporal restoration module against ProPainter.
@@ -204,9 +185,23 @@ This lets us compare how many frames contain a non-empty target mask before and 
 Although this is not a replacement for full GT-backed metrics, it provides a compact quantitative check that the refined masks are more temporally stable than the original automatic masks.
 For \texttt{wild\_video2}, SAM~2 refinement increases temporal mask coverage from $0.547$ to $0.642$ and raises the number of non-empty mask frames from $104$ to $122$.
 At the same time, the mean mask area ratio drops from $0.0166$ to $0.0115$, indicating that the improved masks are not simply larger; instead, they are more temporally stable and spatially tighter around the walking person.
+Figure~\ref{fig:wild-ablation-metrics} summarizes the \texttt{wild\_video2} mask-side refinement results.
+Compared with the original Part 1 masks, single-prompt SAM~2 increases temporal coverage from $0.547$ to $0.642$ and raises the number of non-empty mask frames from $104$ to $122$.
+At the same time, the mean mask area ratio drops from $0.0166$ to $0.0115$, indicating that the refined masks are not merely larger; they are also spatially tighter.
 However, the multi-prompt ablation shows that simple prompt ensembling does not further improve this sequence: both union and majority-vote fusion produce almost identical temporal coverage and area statistics.
 This negative result is useful because it narrows the interpretation of the remaining error: the main gain comes from moving from weak automatic masks to prompt-guided SAM~2 propagation, not from choosing more prompt frames and fusing them with a simple rule.
 Finally, the lightweight SD2 keyframe baseline is technically feasible and can remove the target cleanly on the chosen frames, but it does not provide a clear visual advantage over the ProPainter reference, so it remains a supplemental rather than a dominant result.
+
+\begin{figure*}[t]
+  \centering
+  \IfFileExists{assets/wild_video2_ablation_metrics.png}{
+    \includegraphics[width=\textwidth]{assets/wild_video2_ablation_metrics.png}
+  }{
+    \fbox{\rule{0pt}{1.5in}\rule{0.98\textwidth}{0pt}}
+  }
+  \caption{Quantitative summary of the \texttt{wild\_video2} refinement branches. Single-prompt SAM~2 yields the main improvement over Part 1, while union and majority fusion remain nearly unchanged, confirming that simple prompt ensembling does not materially improve the sequence.}
+  \label{fig:wild-ablation-metrics}
+\end{figure*}
 
 \subsection{Qualitative Results}
 The strongest current qualitative comparisons come from \texttt{bmx-trees} and \texttt{tennis}.
@@ -243,16 +238,6 @@ On the same failure case, the lightweight SD2 keyframe baseline produces accepta
     \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
   }
   \caption{Failure-to-improvement case on \texttt{wild\_video2}. Prompt-guided SAM~2 refinement yields better masks and a cleaner final restoration than the original failure case.}
-\end{figure}
-
-\begin{figure}[t]
-  \centering
-  \IfFileExists{assets/wild_video2_part1_vs_sam2_multi_majority_part2.png}{
-    \includegraphics[width=\linewidth]{assets/wild_video2_part1_vs_sam2_multi_majority_part2.png}
-  }{
-    \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
-  }
-  \caption{Multi-prompt SAM~2 majority-vote ablation on \texttt{wild\_video2}. The result remains clean, but it is visually very similar to the single-prompt SAM~2 result, matching the nearly unchanged temporal-coverage statistics in Table~4.}
 \end{figure}
 
 \subsection{Failure Analysis}
