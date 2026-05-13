@@ -111,6 +111,24 @@ The latter two are self-recorded real-scene videos with a single walking person 
 An optional DAVIS subset~\cite{perazzi2016davis} remains a useful next source for additional mask evaluation.
 If we need restoration metrics such as PSNR or SSIM, we must construct a synthetic masked-frame benchmark with known clean targets rather than relying on raw DAVIS object masks alone.
 
+\begin{table}[t]
+  \centering
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{@{}p{0.21\linewidth}p{0.17\linewidth}p{0.10\linewidth}p{0.38\linewidth}@{}}
+    \toprule
+    Sequence & Source & Frames & Role \\
+    \midrule
+    \texttt{bmx-trees} & Course & 40 & Annotated benchmark \\
+    \texttt{tennis} & Course & 50 & Annotated benchmark \\
+    \texttt{wild\_video1} & Self-recorded & 190 & Real-scene success case \\
+    \texttt{wild\_video2} & Self-recorded & 190 & Failure-to-improvement case \\
+    \bottomrule
+  \end{tabular}
+  \caption{Summary of the sequences used in the current project. The annotated course videos support mask evaluation, while the two wild videos provide real-scene qualitative analysis.}
+  \label{tab:dataset-summary}
+\end{table}
+
 \subsection{Implementation Details}
 All experiments were run on a remote GPU server with CUDA-enabled PyTorch environments.
 The Part~1 baseline was executed in our local project environment, while ProPainter and SAM~2 were installed in separate conda environments to avoid dependency conflicts.
@@ -140,14 +158,28 @@ This staged setup was useful in practice because it let us diagnose whether fail
 \end{table}
 
 \subsection{Metrics}
-For mask quality, we report $J_M$ and $J_R$, which correspond to region similarity and recall-style mask coverage, together with mean precision for additional interpretation.
-Concretely, if $M_t$ is the predicted mask and $G_t$ is the ground-truth mask on frame $t$, then the region similarity is the standard Jaccard index
+For mask quality, we report dataset-level averages of region similarity and recall-style coverage, denoted by $J_M$ and $J_R$, together with mean precision for additional interpretation.
+If $M_t$ is the predicted mask and $G_t$ is the ground-truth mask on frame $t$, then the per-frame region similarity is the standard Jaccard index
 \begin{equation}
   J(M_t, G_t) = \frac{|M_t \cap G_t|}{|M_t \cup G_t|}.
 \end{equation}
+We then report the sequence average
+\begin{equation}
+  J_M = \frac{1}{T} \sum_{t=1}^{T} J(M_t, G_t).
+\end{equation}
+To measure whether the predicted mask sufficiently covers the ground-truth foreground, we define the per-frame recall-style coverage
+\begin{equation}
+  R(M_t, G_t) = \frac{|M_t \cap G_t|}{|G_t|},
+\end{equation}
+and average it over the sequence as
+\begin{equation}
+  J_R = \frac{1}{T} \sum_{t=1}^{T} R(M_t, G_t).
+\end{equation}
 These metrics are directly applicable to \texttt{bmx-trees} and \texttt{tennis}, where foreground mask annotations are available.
+We additionally report mean precision to capture the complementary tendency of the predicted masks to over-expand into background regions.
 For restoration quality, PSNR and SSIM are only meaningful when a clean target frame exists.
 Since our current wild-video experiments do not provide clean-background ground truth, the main restoration evidence in this draft is qualitative rather than pixel-wise.
+In other words, restoration metrics are omitted for the wild videos not because they are unimportant, but because no paired clean target frames are available for a valid pixel-wise comparison.
 For the \texttt{wild\_video2} failure case, we therefore use two lightweight summary statistics over a $T$-frame sequence:
 \begin{equation}
   C = \frac{1}{T} \sum_{t=1}^{T} \mathbf{1}\!\left[\|M_t\|_0 > 0\right],
@@ -228,6 +260,16 @@ On the same failure case, the lightweight SD2 keyframe baseline produces accepta
     \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
   }
   \caption{Second controlled comparison on \texttt{tennis}. Even with stronger baseline masks, ProPainter still reduces ghosting and produces cleaner court textures than the Part 1 backend.}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \IfFileExists{assets/wild_video1_part1_vs_part2.png}{
+    \includegraphics[width=\linewidth]{assets/wild_video1_part1_vs_part2.png}
+  }{
+    \fbox{\rule{0pt}{1.2in}\rule{0.95\linewidth}{0pt}}
+  }
+  \caption{Real-scene success case on \texttt{wild\_video1}. With the same automatic masks, ProPainter produces a cleaner person removal result and more consistent background synthesis than the Part 1 baseline.}
 \end{figure}
 
 \begin{figure}[t]
