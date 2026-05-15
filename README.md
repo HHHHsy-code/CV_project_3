@@ -88,7 +88,7 @@ If you have mask ground truth or clean targets, organize them as:
 
 ```text
 data/raw/davis/<sequence>/masks/
-data/raw/davis/<sequence>/gt_frames/   # only if you build a synthetic benchmark with clean targets
+data/raw/davis/<sequence>/gt_frames/
 ```
 
 ## Baseline usage
@@ -193,7 +193,7 @@ This means the current final story is:
 - multi-prompt fusion is a negative / limited-gain ablation
 - image-level diffusion is a supplemental experiment, not the main video pipeline
 
-The repository also includes optional helper commands for `Track-Anything` and `AttentiveEraser`, but those heavier branches are not part of the final validated result set.
+The repository also includes an optional `AttentiveEraser` helper branch, but it is not part of the final validated result set.
 
 ### Main branch: single-prompt `SAM 2 + ProPainter`
 

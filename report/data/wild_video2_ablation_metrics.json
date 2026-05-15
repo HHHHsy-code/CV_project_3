@@ -1,0 +1,28 @@
+{
+  "branches": [
+    {
+      "name": "Part 1",
+      "non_empty_frames": 104,
+      "temporal_coverage": 0.5473684210526316,
+      "mean_area_ratio_all": 0.016562256049960967
+    },
+    {
+      "name": "SAM2 single-prompt",
+      "non_empty_frames": 122,
+      "temporal_coverage": 0.6421052631578947,
+      "mean_area_ratio_all": 0.0115
+    },
+    {
+      "name": "SAM2 union",
+      "non_empty_frames": 122,
+      "temporal_coverage": 0.6421052631578947,
+      "mean_area_ratio_all": 0.0116487812769629
+    },
+    {
+      "name": "SAM2 majority",
+      "non_empty_frames": 122,
+      "temporal_coverage": 0.6421052631578947,
+      "mean_area_ratio_all": 0.011511938144541682
+    }
+  ]
+}

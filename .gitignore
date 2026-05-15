@@ -9,6 +9,7 @@ __pycache__/
 .cache/
 .tmp_pdf_env/
 .omx/
+.overleaf_pack/
 /Project3/
 /tmp/
 
@@ -36,6 +37,13 @@ report/*.log
 report/*.out
 report/*.pdf
 report/assets/generated/
+!report/assets/generated/
+report/assets/generated/*
+!report/assets/generated/benchmark_mask_metrics.pdf
+!report/assets/generated/wild_video2_ablation_metrics.pdf
+!report/assets/generated/course_sequence_comparisons.pdf
+!report/assets/generated/wild_sequence_comparisons.pdf
+report/overleaf_upload.zip
 
 docs/*.aux
 docs/*.fdb_latexmk
@@ -48,3 +56,8 @@ docs/presentation_outline_progress_*.pdf
 docs/presentation_script_progress_*.pdf
 
 outputs/presentation/
+
+main.aux
+main.fdb_latexmk
+main.fls
+main.log
