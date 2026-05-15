@@ -27,6 +27,12 @@ metrics/*
 !metrics/.gitkeep
 
 report/build/
+report/*.tex
+report/*.bib
+report/*.bst
+report/*.sty
+report/outline.md
+report/data/
 report/*.aux
 report/*.bbl
 report/*.blg

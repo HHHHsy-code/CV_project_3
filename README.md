@@ -23,7 +23,7 @@ outputs/
   part1/               Baseline masks, videos, figures
   part2/               SAM2 / ProPainter outputs
   part3/               Diffusion extension outputs
-report/                Paper writing scaffold
+report/                Result figures and paper assets
 scripts/               Thin entrypoint wrappers
 src/project3/          Main implementation
 ```
