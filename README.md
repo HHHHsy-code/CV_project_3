@@ -44,10 +44,6 @@ src/project3/          Main implementation
   - `SAM 2`
   - `ProPainter`
   - keyframe-level diffusion inpainting experiments
-- Course execution docs for:
-  - week-by-week project progress
-  - final submission checklist
-  - 8-minute presentation outline
 
 ## Environment setup
 
@@ -173,12 +169,6 @@ python3 scripts/project3.py compare-methods \
 ```
 
 ## Part 2 and Part 3 workflow
-
-The repository does not vendor third-party SOTA code. Instead, it provides:
-
-- a standard place to store prompts and outputs
-- config-driven wrappers for external tools
-- a unified experiment naming convention
 
 Recommended process:
 
@@ -354,31 +344,3 @@ python scripts/run_attentive_eraser_keyframes.py \
 ```
 
 For a smoke test, add `--keyframes 75` first and verify that `outputs/part3/wild_video2_attentive_eraser/edited/edited_00075.png` is produced before running the full batch.
-
-## Official upstream references
-
-The current Part 3 recommendations are based on the official public repositories:
-
-- `SAM 2`: [facebookresearch/sam2](https://github.com/facebookresearch/sam2)
-- `AttentiveEraser`: [Alibaba-YuFeng/AttentiveEraser](https://github.com/Alibaba-YuFeng/AttentiveEraser)
-
-`Track-Anything` support remains in the codebase as an optional future branch, but it is not part of the current final validated result path.
-
-## Suggested experiments
-
-- `wild corridor`: fixed camera, pedestrians crossing the scene
-- `bmx-trees`: validate removal under repeated motion and thin structures
-- `tennis`: validate removal on faster motion and more occlusion
-- `DAVIS subset`: strengthen mask evaluation and support claims for the report
-
-## Deliverables checklist
-
-- `Part 1` fully runs on all mandatory datasets
-- `Part 2` runs on all mandatory datasets
-- at least one `Part 3` failure-case extension
-- processed videos for `wild`, `bmx-trees`, `tennis`
-- 6-8 page CVPR-style report
-- public GitHub repo
-- arXiv upload
-
-See `docs/submission_checklist.md` for the operational checklist.
