@@ -8,7 +8,7 @@ The current codebase is optimized for fast iteration:
 
 - `Part 1`: a reproducible classical baseline built around `YOLOv8-seg + sparse optical flow + temporal background borrowing + cv2.inpaint`
 - `Part 2`: adapter hooks for `SAM 2 + ProPainter`
-- `Part 3`: a controlled extension path for keyframe-level generative inpainting on failure cases
+- `Part 3`: a failure-case extension built around `single-prompt SAM 2 refinement`, `multi-prompt SAM 2 ablation`, and a `lightweight SD2 keyframe baseline`
 
 ## Repository layout
 
@@ -39,7 +39,6 @@ src/project3/          Main implementation
   - saves mask videos, restored videos, and representative figure grids
 - Evaluation utilities for:
   - mask quality: `JM`, `JR`, precision, recall
-  - restored frame quality: `PSNR`, `SSIM`
 - Helper adapters and command templates for:
   - `SAM 2`
   - `ProPainter`
@@ -64,7 +63,6 @@ pip install numpy opencv-python pyyaml matplotlib
 For the full target workflow you will eventually also need:
 
 - `ultralytics` for YOLOv8-seg
-- `scikit-image` for SSIM
 - local clones or installed environments for `SAM 2` and `ProPainter`
 
 ## Dataset preparation
